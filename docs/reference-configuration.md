@@ -36,6 +36,15 @@ This resolves the value through the Python configuration layer, using command-li
 | `embeddingprovider` | `Local` | `Local` (Python-side model), or the id of a provider that serves an OpenAI-compatible `/embeddings` endpoint — `OpenAI` and `ASICloud` are known to. The gateway supplies that provider's key. |
 | `embeddingModel` | empty | Model asked of a non-`Local` `embeddingprovider`. Empty means the provider default: `text-embedding-3-large` for `OpenAI`, `WhereIsAI/UAE-Large-V1` for `ASICloud`. |
 
+### Startup knowledge indexing
+
+`knowledgeIndexingBackground` defaults to `false`, keeping synchronous startup.
+Set it to `true` to index `knowledge-priors/*.md` in a background thread while
+plugins and channels start. Completed files become available to `query`
+progressively in the runtime memory collection. Background errors are logged.
+
+Local model loading still happens before indexing and can delay cold startup.
+
 ## Channels (`src/channels.metta`, `initChannels`)
 
 | Parameter | Default | Meaning |
