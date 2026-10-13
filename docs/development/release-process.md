@@ -184,6 +184,29 @@ This means that the final tags point to the same image that was built and approv
 
 ---
 
+# Versioning strategy
+
+Project versioning should be compatible to [Semantic versioning specification](https://semver.org/).
+Each version consists of three numbers major, minor and patch version.
+The whole version name looks like `v<major>.<minor>.<patch>`.
+
+Patch version is incremented when minor changes are made.
+For example it is incremented when patch release is prepared (see [Patch release](#patch_release)).
+GitHub flow assumes creating a tag before release build is started and because of this it is impossible to reuse release version.
+It means that version is incremented even in case when release build is not promoted to the production.
+
+If release contains new functionality or features which are backward-compatible then minor version should be incremented.
+If release contains breaking or incompatible changes that require consumers to adapt then major version should be incremented.
+The breaking changes include changes to the following areas:
+- all APIs available to the plugins
+- format of the configuration files
+- the format of the imported exported data such as knowledge base or exported memory
+- the layout of the directories and files which keep the state of the agent between sessions
+
+Major version 0 is reserved for the beta version of software and should not be incremented until beta version is done.
+
+---
+
 # Patch release
 
 There two situations which require adding changes to the release candidate version:
@@ -197,10 +220,8 @@ The name of the branch should be `patch-to-<current release version>`.
 All release fixes should be merged into the patch release branch.
 
 When the branch includes all necessary fixes new release is initiated from the branch.
-The release process is similar to [above](#phase-2-release-publication-and-promotion) except version.
-Major and minor version of the patch release should be equal to the ones of the current release.
-Patch version should be incremented (see [https://semver.org/](https://semver.org/) for explanation).
-Thus if current release version is `v<major>.<minor>.<patch>` then patch release version is `v<major>.<minor>.<patch+1>`
+The release process is similar to [Release publication process](#phase-2-release-publication-and-promotion) but the patch release branch is used instead of main branch.
+Patch version should be chosen according to the [Versioning strategy](#versioning_strategy).
 After release is promoted to the production the patch release branch should be merged into the main branch of the repository by separate PR.
 
 The processes explained in this document do not support making few releases in parallel. It is supposed that team works on the single release or patch release and finishes the release preparation by promoting release version to the production or cancelling the release.
