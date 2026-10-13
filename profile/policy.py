@@ -4,6 +4,7 @@ import yaml
 import json
 from py_landlock import Landlock, AccessFs
 from pathlib import Path
+from glob import glob
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -13,6 +14,7 @@ def apply_security_policy(path):
         if path:
             policy = FileSystemPolicy()
             policy.load_file(path)
+            policy.validate()
             policy.apply()
         else:
             logger.warning("SecurityPolicyPath is not set")
@@ -44,8 +46,8 @@ def get_allowed_policy_paths(path) -> str:
             policy = FileSystemPolicy()
             policy.load_file(path)
             return json.dumps({
-                'read_only': [str(p) for p in policy._read_only],
-                'read_write': [str(p) for p in policy._read_write]
+                'read_only': [str(p) for p in policy._resolve_paths(policy._read_only, logging=False)],
+                'read_write': [str(p) for p in policy._resolve_paths(policy._read_write, logging=False)]
             })
         else:
             logger.warning("SecurityPolicyPath is not set")
@@ -72,6 +74,12 @@ class FileSystemPolicy:
                              | AccessFs.MAKE_SOCK)
     READ_WRITE_FILE_ACCESS = (AccessFs.READ_FILE | AccessFs.WRITE_FILE |
                               AccessFs.TRUNCATE | AccessFs.IOCTL_DEV)
+    # GPU paths are platform specific: /dev/dxg exists on WSL2 only, the
+    # NVIDIA device nodes and the PCI topology on native Linux only. The
+    # policy lists all of them, so these are the only paths allowed to be
+    # missing on a host machine.
+    OPTIONAL_PATH_PREFIXES = ('/dev/dxg', '/dev/nvidia', '/sys/bus/pci',
+                              '/sys/class/drm', '/sys/devices/pci')
 
     def __init__(self):
         self._compatibility = LandLockCompatibility.BEST_EFFORT
@@ -117,28 +125,62 @@ class FileSystemPolicy:
         self._read_write = [Path(f'{p}') for p in rw]
 
     @staticmethod
-    def _existing_paths(paths: list[Path]) -> list[Path]:
-        """Drop policy paths that do not exist on a host machine.
+    def _resolve_paths(paths: list[Path], logging: bool = True) -> list[Path]:
+        """Expand glob patterns and drop paths missing on a host machine.
 
         Landlock cannot add a rule for a missing path, and the policy lists
         platform-specific paths such as GPU device nodes that exist only on
         some host machines.
 
         Args:
-            paths: Paths listed in the policy.
+            paths: Paths and glob patterns listed in the policy.
+            logging: Whether to log missing paths.
 
         Returns:
-            Paths that exist on a host machine.
+            Existing paths the patterns resolve to.
         """
-        existing = [p for p in paths if p.exists()]
-        missing = [str(p) for p in paths if not p.exists()]
+        resolved = set()
+        missing = []
+        for path in paths:
+            matches = glob(str(path))
+            if not matches:
+                missing.append(str(path))
+            for match in matches:
+                resolved.add(Path(match))
+        if missing and logging:
+            logger.info(f"Skipped missing optional policy paths: {missing}")
+        return sorted(resolved)
+
+    @classmethod
+    def _is_optional(cls, path: Path) -> bool:
+        """Check whether the policy may list a path a host machine lacks.
+
+        Args:
+            path: Path listed in the policy.
+
+        Returns:
+            True for the platform specific GPU paths.
+        """
+        return str(path).startswith(cls.OPTIONAL_PATH_PREFIXES)
+
+    def validate(self):
+        """Check that the policy lists no path missing on a host machine.
+
+        A missing path gets no Landlock rule, so a path mistyped in the
+        policy is denied silently and shows up much later as a runtime
+        error.
+
+        Raises:
+            ValueError: If a path which is not optional is missing.
+        """
+        missing = [str(p) for p in self._read_only + self._read_write
+                   if not self._is_optional(p) and not glob(str(p))]
         if missing:
-            logger.info(f"Skipped missing policy paths: {missing}")
-        return existing
+            raise ValueError(f"Policy paths missing on a host machine: {missing}")
 
     def apply(self):
-        ro = self._existing_paths(self._read_only)
-        rw = self._existing_paths(self._read_write)
+        ro = self._resolve_paths(self._read_only)
+        rw = self._resolve_paths(self._read_write)
         rod = list(filter(lambda p: p.is_dir(), ro))
         rof = list(filter(lambda p: not p.is_dir(), ro))
         rwd = list(filter(lambda p: p.is_dir(), rw))

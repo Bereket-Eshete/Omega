@@ -75,14 +75,38 @@ git checkout devices-landlock-fix
 docker build -t omega:gpu .
 ```
 
+### PyTorch with CUDA
+
+The image installs the CPU-only build of PyTorch, see the `--index-url` option
+in [Dockerfile](../Dockerfile). Device access alone does not change that:
+`nvidia-smi` and the CUDA driver API work inside the container, but
+`torch.cuda.is_available()` stays `False`. To let PyTorch use the GPU, point
+the option at the CUDA build matching your driver before building the image,
+for example:
+
+```diff
+-    --index-url https://download.pytorch.org/whl/cpu \
++    --index-url https://download.pytorch.org/whl/cu130 \
+```
+
+The builds published for the pinned PyTorch version are listed at
+[download.pytorch.org/whl](https://download.pytorch.org/whl/). The CUDA ones
+are large, a few gigabytes to download instead of about 200 MB, and the image
+grows accordingly. Check the result after the container starts:
+
+```sh
+docker exec omega python3 -c 'import torch; print(torch.cuda.is_available(), torch.cuda.device_count())'
+```
+
 ## Start the container
 
 Start the container with your own command and pass the GPUs with
 `--device nvidia.com/gpu=all`, or a single GPU by its CDI name from
 `nvidia-ctk cdi list`, for example `--device nvidia.com/gpu=0`. The other
-options match the ones `scripts/omega` uses. Example for Telegram and OpenAI,
-with `OPENAI_API_KEY`, `TG_BOT_TOKEN` and `OMEGA_AUTH_SECRET` exported in your
-shell:
+options and the agent arguments match the ones `scripts/omega` uses, except
+for `securityPolicyPath`, which selects the GPU policy. Example for Telegram
+and OpenAI, with `OPENAI_API_KEY`, `TG_BOT_TOKEN` and `OMEGA_AUTH_SECRET`
+exported in your shell:
 
 ```sh
 docker rm -f omega
@@ -99,8 +123,16 @@ docker run -d -it \
   -e OPENAI_API_KEY \
   -e TG_BOT_TOKEN \
   -e OMEGA_AUTH_SECRET \
-  omega:gpu
+  omega:gpu \
+  commchannel=telegram \
+  provider=OpenAI \
+  embeddingprovider=OpenAI \
+  securityPolicyPath=/PeTTa/repos/Omega/profile/policy-gpu.yaml
 ```
+
+Without the agent arguments the container starts with the defaults from
+[config/config.yaml](../config/config.yaml), which means the IRC channel and
+the stock security policy, and the agent gets no GPU access.
 
 Do not restart this container with `scripts/omega start`: it recreates the
 container without the GPU options. `docker stop omega` and `docker start omega`
