@@ -184,6 +184,29 @@ This means that the final tags point to the same image that was built and approv
 
 ---
 
+# Patch release
+
+There two situations which require adding changes to the release candidate version:
+1. critical bug is found before current release tag is promoted to the latest version
+2. hotfix is required after release is published and tag is promoted to the latest version
+
+In both situations there is a chance other PRs are merged to the main branch after the release tag.
+It means we cannot merge patch into the main branch because in such case the main branch includes both release patch and new functionality.
+The proper way to handle it is making patch release branch from the release tag.
+The name of the branch should be `patch-to-<current release version>`.
+All release fixes should be merged into the patch release branch.
+
+When the branch includes all necessary fixes new release is initiated from the branch.
+The release process is similar to [above](#phase-2-release-publication-and-promotion) except version.
+Major and minor version of the patch release should be equal to the ones of the current release.
+Patch version should be incremented (see [https://semver.org/](https://semver.org/) for explanation).
+Thus if current release version is `v<major>.<minor>.<patch>` then patch release version is `v<major>.<minor>.<patch+1>`
+After release is promoted to the production the patch release branch should be merged into the main branch of the repository by separate PR.
+
+The processes explained in this document do not support making few releases in parallel. It is supposed that team works on the single release or patch release and finishes the release preparation by promoting release version to the production or cancelling the release.
+
+---
+
 # Key Points
 
 * QA builds and tests the PR code locally before it is merged into `main`.
