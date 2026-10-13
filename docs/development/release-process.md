@@ -224,7 +224,7 @@ The release process is similar to [Release publication process](#phase-2-release
 Patch version should be chosen according to the [Versioning strategy](#versioning_strategy).
 After release is promoted to the production the patch release branch should be merged into the main branch of the repository by separate PR.
 
-The processes explained in this document do not support making few releases in parallel. It is supposed that team works on the single release or patch release and finishes the release preparation by promoting release version to the production or cancelling the release.
+The processes described in this document allow a patch release to be prepared while development of the next major or minor release continues on the main branch. However, only one release process should be active at a time, and each release process must be completed by promoting the release to production or cancelling it before another release process can begin.
 
 ---
 
