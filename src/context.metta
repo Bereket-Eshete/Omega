@@ -369,14 +369,21 @@
 (= (cfv2-touch-current-frame)
    (change-state! &cfv2-current-updated-at (cfv2-now)))
 
-(= (cfv2-history-category $kind)
-   (case $kind (
-      (CommandBatch CommandBatch)
-      (UserDirective UserDirective)
-      (UserMessageForCurrentFrame UserDirective)
-      (AgentDirective AgentDirective)
-      (ResultAdded Result)
-      ($_ Milestone)
+(= (cfv2-history-event-type $event)
+   (case $event (
+      (UserDirective (HistoryEventType Directive UserDirective))
+      (UserMessageForCurrentFrame (HistoryEventType Directive UserDirective))
+      (AgentDirective (HistoryEventType Directive AgentDirective))
+      (CommandBatch (HistoryEventType Execution CommandBatch))
+      (ResultAdded (HistoryEventType Observation ResultAdded))
+      (HypothesisAdded (HistoryEventType StateChange HypothesisAdded))
+      (CertifiedMethodUpdated (HistoryEventType StateChange MethodCertified))
+      (DeliverableAdded (HistoryEventType StateChange DeliverableAdded))
+      (ConstraintAdded (HistoryEventType StateChange ConstraintAdded))
+      (SubFrameCompleted (HistoryEventType Lifecycle FrameCompleted))
+      (FrameCompleted (HistoryEventType Lifecycle FrameCompleted))
+      (FrameJunkCleared (HistoryEventType Maintenance FrameJunkCleared))
+      ($_ (HistoryEventType Unclassified $event))
    )))
 
 ;; Events share one initialized state and are selected by frame ID and category.
@@ -393,7 +400,7 @@
       (or (== $category ())
           (== $eventCategory $category))))
 
-(= (cfv2-add-frame-event $frameID $category $kind $payload)
+(= (cfv2-add-frame-event $frameID (HistoryEventType $category $kind) $payload)
    (let* (($event (FrameEvent
                     (frameID $frameID)
                     (category $category)
@@ -409,11 +416,12 @@
          (cfv2-get-frame-events (get-state &cfv2-current-frame-id) ()))))
 
 (= (cfv2-update-current-history-summary $kind $summary)
-   (let $frameID (get-state &cfv2-current-frame-id)
+   (let* (($frameID (get-state &cfv2-current-frame-id))
+          ($eventType (cfv2-history-event-type $kind)))
       (if (== $frameID ())
           NO-CURRENT-FRAME-FOR-HISTORY
           (progn
-             (cfv2-add-frame-event $frameID (cfv2-history-category $kind) $kind $summary)
+             (cfv2-add-frame-event $frameID $eventType $summary)
              (cfv2-refresh-current-history-summary)
              HISTORY-EVENT-RECORDED))))
 
@@ -489,7 +497,7 @@
           ($goalSpaceID (cfv2-make-id &GoalSpace))
           ($subFrameSpaceID (cfv2-make-id &SubFrameSpace))
           ($now (cfv2-now))
-          ($_ (cfv2-add-frame-event $frameID (cfv2-history-category $source) $source $description))
+          ($_ (cfv2-add-frame-event $frameID (cfv2-history-event-type $source) $description))
           ($historySummary (cfv2-compact-history (cfv2-get-frame-events $frameID ())))
           ($deliverables $description)
           ($subframe (cfv2-create-sub-frame $frameID $subFrameSpaceID $goalSpaceID $description $source $priority $deliverables))
