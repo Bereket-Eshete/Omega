@@ -375,103 +375,150 @@ def _unescape_repr_id(value: str) -> str:
 
 
 def _balanced_exprs(text: str, head: str) -> List[str]:
-    """Extract top-level balanced s-expressions whose head is `head`.
+    """Extract balanced s-expressions whose head is `head` outside strings.
 
     This is a pragmatic parser for scorer/runtime helper use. It is not a full MeTTa parser,
-    but it handles strings and nested parentheses well enough for Frame/FrameRef atoms.
+    but it handles quoted strings and nested parentheses well enough for Frame/FrameRef atoms.
     """
     text = str(text)
-    starts = []
     token = f"({head}"
-    i = 0
-    while True:
-        idx = text.find(token, i)
-        if idx < 0:
-            break
-        starts.append(idx)
-        i = idx + len(token)
-
     out = []
-    for start in starts:
-        depth = 0
-        in_str = False
-        escaped = False
-        for j in range(start, len(text)):
-            ch = text[j]
-            if in_str:
-                if escaped:
-                    escaped = False
-                elif ch == "\\":
-                    escaped = True
-                elif ch == '"':
-                    in_str = False
-                continue
-            if ch == '"':
-                in_str = True
-            elif ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                if depth == 0:
-                    out.append(text[start : j + 1])
-                    break
-    return out
-
-
-def _field(expr: str, field_name: str) -> Optional[str]:
-    """Return the raw value of a first-level-ish `(field value)` form.
-
-    This intentionally works on the stable constructor format emitted by the MeTTa code.
-    """
-    pattern = f"({field_name}"
-    idx = expr.find(pattern)
-    if idx < 0:
-        return None
-    start = idx + len(pattern)
-    # Skip whitespace.
-    while start < len(expr) and expr[start].isspace():
-        start += 1
-    if start >= len(expr):
-        return None
-    if expr[start] == "(":
-        depth = 0
-        in_str = False
-        escaped = False
-        for j in range(start, len(expr)):
-            ch = expr[j]
-            if in_str:
-                if escaped:
-                    escaped = False
-                elif ch == "\\":
-                    escaped = True
-                elif ch == '"':
-                    in_str = False
-                continue
-            if ch == '"':
-                in_str = True
-            elif ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                if depth == 0:
-                    return expr[start : j + 1]
-        return None
-    if expr[start] == '"':
-        escaped = False
-        for j in range(start + 1, len(expr)):
-            ch = expr[j]
+    i = 0
+    in_str = False
+    escaped = False
+    while i < len(text):
+        ch = text[i]
+        if in_str:
             if escaped:
                 escaped = False
             elif ch == "\\":
                 escaped = True
             elif ch == '"':
-                return expr[start : j + 1]
-        return None
-    # Atom/number until whitespace or close paren.
-    end = start
-    while end < len(expr) and not expr[end].isspace() and expr[end] != ")":
-        end += 1
-    return expr[start:end]
+                in_str = False
+            i += 1
+            continue
+
+        if ch == '"':
+            in_str = True
+            i += 1
+            continue
+
+        if text.startswith(token, i):
+            after_head = i + len(token)
+            if after_head < len(text) and (text[after_head].isspace() or text[after_head] == "("):
+                start = i
+                depth = 0
+                in_expr_string = False
+                expr_escaped = False
+                for j in range(start, len(text)):
+                    expr_ch = text[j]
+                    if in_expr_string:
+                        if expr_escaped:
+                            expr_escaped = False
+                        elif expr_ch == "\\":
+                            expr_escaped = True
+                        elif expr_ch == '"':
+                            in_expr_string = False
+                        continue
+                    if expr_ch == '"':
+                        in_expr_string = True
+                    elif expr_ch == "(":
+                        depth += 1
+                    elif expr_ch == ")":
+                        depth -= 1
+                        if depth == 0:
+                            out.append(text[start : j + 1])
+                            i = j + 1
+                            break
+                else:
+                    i += len(token)
+                continue
+
+        i += 1
+    return out
+
+
+def _field(expr: str, field_name: str) -> Optional[str]:
+    """Return the raw value of a direct child `(field value)` form."""
+    expr = str(expr)
+    pattern = f"({field_name}"
+    depth = 0
+    in_str = False
+    escaped = False
+    i = 0
+    while i < len(expr):
+        ch = expr[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            i += 1
+            continue
+
+        if ch == '"':
+            in_str = True
+            i += 1
+            continue
+
+        if ch == "(" and depth == 1 and expr.startswith(pattern, i):
+            after_name = i + len(pattern)
+            if after_name < len(expr) and (expr[after_name].isspace() or expr[after_name] == "("):
+                start = after_name
+                while start < len(expr) and expr[start].isspace():
+                    start += 1
+                if start >= len(expr):
+                    return None
+
+                if expr[start] == '"':
+                    value_escaped = False
+                    for end in range(start + 1, len(expr)):
+                        value_ch = expr[end]
+                        if value_escaped:
+                            value_escaped = False
+                        elif value_ch == "\\":
+                            value_escaped = True
+                        elif value_ch == '"':
+                            return expr[start : end + 1]
+                    return None
+
+                if expr[start] == "(":
+                    value_depth = 0
+                    value_in_str = False
+                    value_escaped = False
+                    for end in range(start, len(expr)):
+                        value_ch = expr[end]
+                        if value_in_str:
+                            if value_escaped:
+                                value_escaped = False
+                            elif value_ch == "\\":
+                                value_escaped = True
+                            elif value_ch == '"':
+                                value_in_str = False
+                            continue
+                        if value_ch == '"':
+                            value_in_str = True
+                        elif value_ch == "(":
+                            value_depth += 1
+                        elif value_ch == ")":
+                            value_depth -= 1
+                            if value_depth == 0:
+                                return expr[start : end + 1]
+                    return None
+
+                end = start
+                while end < len(expr) and not expr[end].isspace() and expr[end] != ")":
+                    end += 1
+                return expr[start:end]
+
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        i += 1
+    return None
 
 def cfv2_refs_completed_after(index_repr, date_prefix) -> str:
     """Return completed FrameRefs whose completed-timestamp starts with or compares after date_prefix.

@@ -435,13 +435,22 @@
           (FRAME-NOTE-RECORDED))))
 
 (= (cfv2-record-command-batch $commands $results)
-   (if (== (get-state &cfv2-current-frame-id) ())
+   (cfv2-record-command-batch-for-frame
+      (get-state &cfv2-current-frame-id) $commands $results))
+
+(= (cfv2-record-command-batch-for-frame $frameID $commands $results)
+   (if (== $frameID ())
        NO-CURRENT-FRAME-FOR-COMMAND-BATCH
       (let $resultsSummary (append $commands $results)
          (progn
-            (cfv2-update-current-history-summary CommandBatch $resultsSummary)
-            (cfv2-touch-current-frame)
-            (HISTORY-SUMMARY-UPDATED)))))
+            (cfv2-add-frame-event $frameID
+               (cfv2-history-event-type CommandBatch) $resultsSummary)
+            (if (== (get-state &cfv2-current-frame-id) $frameID)
+                (progn
+                   (cfv2-refresh-current-history-summary)
+                   (cfv2-touch-current-frame)
+                   (HISTORY-SUMMARY-UPDATED))
+                HISTORY-EVENT-RECORDED)))))
 
 (= (cfv2-add-hypothesis $id $hypothesis)
    (progn
@@ -920,6 +929,9 @@
 
 (= (ctx-record-command-batch $commands $results)
    (cfv2-record-command-batch $commands $results))
+
+(= (ctx-record-command-batch-for-frame $frameID $commands $results)
+   (cfv2-record-command-batch-for-frame $frameID $commands $results))
 
 (= (ctx-maintain-frame)
    (cfv2-maintain-frame))
