@@ -190,7 +190,7 @@ Project versioning should be compatible to [Semantic versioning specification](h
 Each version consists of three numbers major, minor and patch version.
 The whole version name looks like `v<major>.<minor>.<patch>`.
 
-Patch version is incremented when minor changes are made.
+Patch version is incremented when small, time-sensitive changes or bug fixes are made.
 For example it is incremented when patch release is prepared (see [Patch release](#patch_release)).
 GitHub flow assumes creating a tag before release build is started and because of this it is impossible to reuse release version.
 It means that version is incremented even in case when release build is not promoted to the production.
@@ -203,26 +203,27 @@ The breaking changes include changes to the following areas:
 - the format of the imported exported data such as knowledge base or exported memory
 - the layout of the directories and files which keep the state of the agent between sessions
 
-Major version 0 is reserved for the beta version of software and should not be incremented until beta version is done.
+For this project, major version 0 is reserved for the beta version of software.
+During this phase, breaking changes trigger a minor version increment rather than a major one, until the project is explicitly promoted out of beta with version 1.0.0.
 
 ---
 
 # Patch release
 
-There two situations which require adding changes to the release candidate version:
+There are two situations which require adding changes via a patch release to a major or minor release candidate version:
 1. critical bug is found before current release tag is promoted to the latest version
 2. hotfix is required after release is published and tag is promoted to the latest version
 
-In both situations there is a chance other PRs are merged to the main branch after the release tag.
-It means we cannot merge patch into the main branch because in such case the main branch includes both release patch and new functionality.
+In both situations there is a chance other PRs are merged to the `main` branch after the release tag.
+It means we cannot create a patch release from the `main` branch because it may contain changes merged after the current release tag, including changes that are not intended to be part of the patch release.
 The proper way to handle it is making patch release branch from the release tag.
 The name of the branch should be `patch-to-<current release version>`.
 All release fixes should be merged into the patch release branch.
 
-When the branch includes all necessary fixes new release is initiated from the branch.
-The release process is similar to [Release publication process](#phase-2-release-publication-and-promotion) but the patch release branch is used instead of main branch.
+When the branch includes all necessary fixes new patch release is initiated from the branch.
+The release process is similar to [Release publication process](#phase-2-release-publication-and-promotion) but the patch release branch is used instead of `main` branch.
 Patch version should be chosen according to the [Versioning strategy](#versioning_strategy).
-After release is promoted to the production the patch release branch should be merged into the main branch of the repository by separate PR.
+After release is promoted to the production the patch release branch should be merged into the `main` branch of the repository by separate PR.
 
 The processes described in this document allow a patch release to be prepared while development of the next major or minor release continues on the main branch. However, only one release process should be active at a time, and each release process must be completed by promoting the release to production or cancelling it before another release process can begin.
 
