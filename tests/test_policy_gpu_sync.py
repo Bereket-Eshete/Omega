@@ -15,6 +15,7 @@ _GPU_POLICY_PATH = _PROFILE_DIR / "policy-gpu.yaml"
 # /proc from read-only to read-write access.
 _MOVED_TO_READ_WRITE = ["/proc"]
 _GPU_READ_ONLY = [
+    "/run/nvidia-persistenced",
     "/sys/bus/pci",
     "/sys/class/drm",
     "/sys/devices/pci*",

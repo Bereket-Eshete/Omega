@@ -1,10 +1,10 @@
 # Reference - GPU Support (Experimental)
 
-> **Experimental.** GPU support is under testing and is not included in Omega
-> releases yet; it is planned for a future release. Released images and
-> `scripts/omega start` do not give the agent GPU access. To try it, build the
-> image from the `devices-landlock-fix` branch and start the container with
-> your own `docker run` command, as described below.
+> **Experimental.** GPU support is under testing. Neither `scripts/omega start`
+> nor the default security policy `profile/policy.yaml` gives the agent GPU
+> access. To try it, build the image from the repository and start the
+> container with your own `docker run` command that passes the GPUs and
+> selects `profile/policy-gpu.yaml`, as described below.
 
 ## Host setup
 
@@ -65,13 +65,12 @@ sudo setsebool -P container_use_devices on
 
 ## Build the image
 
-Build the image from the `devices-landlock-fix` branch. Its security policy
-allows the agent to use the GPU; images built from other branches do not.
+Build the image from the repository. It contains the GPU policy
+`profile/policy-gpu.yaml`; images released before the policy was added do not.
 
 ```sh
 git clone https://github.com/singnet/Omega.git
 cd Omega
-git checkout devices-landlock-fix
 docker build -t omega:gpu .
 ```
 

@@ -9,6 +9,11 @@ from src.logger import get_logger
 
 logger = get_logger(__name__)
 
+_applied_paths = {}
+
+def _policy_key(path) -> str:
+    return str(path or "").strip().strip('"')
+
 def apply_security_policy(path):
     try:
         if path:
@@ -16,6 +21,7 @@ def apply_security_policy(path):
             policy.load_file(path)
             policy.validate()
             policy.apply()
+            _applied_paths[_policy_key(path)] = policy.resolved_paths
         else:
             logger.warning("SecurityPolicyPath is not set")
     except Exception as e:
@@ -41,13 +47,18 @@ def get_allowed_policy_paths(path) -> str:
              If the path is missing or an error occurs, returns a descriptive error string.
     """
     try:
-        path = str(path or "").strip().strip('"')
+        path = _policy_key(path)
         if path:
-            policy = FileSystemPolicy()
-            policy.load_file(path)
+            resolved = _applied_paths.get(path)
+            if resolved is None:
+                policy = FileSystemPolicy()
+                policy.load_file(path)
+                resolved = (policy._resolve_paths(policy._read_only, logging=False),
+                            policy._resolve_paths(policy._read_write, logging=False))
+            read_only, read_write = resolved
             return json.dumps({
-                'read_only': [str(p) for p in policy._resolve_paths(policy._read_only, logging=False)],
-                'read_write': [str(p) for p in policy._resolve_paths(policy._read_write, logging=False)]
+                'read_only': [str(p) for p in read_only],
+                'read_write': [str(p) for p in read_write]
             })
         else:
             logger.warning("SecurityPolicyPath is not set")
@@ -80,12 +91,13 @@ class FileSystemPolicy:
     # to be missing on a host machine.
     OPTIONAL_PATH_PREFIXES = ('/dev/dxg', '/dev/nvidia', '/sys/bus/pci',
                               '/sys/class/drm', '/sys/devices/pci',
-                              '/usr/lib/wsl')
+                              '/usr/lib/wsl', '/run/nvidia-persistenced')
 
     def __init__(self):
         self._compatibility = LandLockCompatibility.BEST_EFFORT
         self._read_only = []
         self._read_write = []
+        self.resolved_paths = ([], [])
 
     def load_file(self, path: str|Path):
         logger.info(f"Loading policy from file {path}")
@@ -180,8 +192,13 @@ class FileSystemPolicy:
             raise ValueError(f"Policy paths missing on a host machine: {missing}")
 
     def apply(self):
-        ro = self._resolve_paths(self._read_only)
-        rw = self._resolve_paths(self._read_write)
+        ro = self._resolve_paths(self._read_only, logging=False)
+        rw = self._resolve_paths(self._read_write, logging=False)
+        missing = [str(p) for p in self._read_only + self._read_write
+                   if not glob(str(p))]
+        if missing:
+            logger.info(f"Skipped missing optional policy paths: {missing}")
+        self.resolved_paths = (ro, rw)
         rod = list(filter(lambda p: p.is_dir(), ro))
         rof = list(filter(lambda p: not p.is_dir(), ro))
         rwd = list(filter(lambda p: p.is_dir(), rw))
