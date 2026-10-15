@@ -15,6 +15,8 @@ filesystem_policy:
   - /sys/bus/pci
   - /sys/class/drm
   - /sys/devices/pci*
+  # WSL
+  - /usr/lib/wsl
   read_write:
   - /PeTTa/repos/Omega/memory
   - /memory-transfer
@@ -33,5 +35,6 @@ filesystem_policy:
   - /dev/nvidia[0-9]*
   - /dev/nvidia-uvm
   - /dev/nvidia-uvm-tools
+  - /dev/nvidia-modeset
 landlock:
   compatibility: best_effort
