@@ -74,12 +74,13 @@ class FileSystemPolicy:
                              | AccessFs.MAKE_SOCK)
     READ_WRITE_FILE_ACCESS = (AccessFs.READ_FILE | AccessFs.WRITE_FILE |
                               AccessFs.TRUNCATE | AccessFs.IOCTL_DEV)
-    # GPU paths are platform specific: /dev/dxg exists on WSL2 only, the
-    # NVIDIA device nodes and the PCI topology on native Linux only. The
-    # policy lists all of them, so these are the only paths allowed to be
-    # missing on a host machine.
+    # GPU paths are platform specific: /dev/dxg and /usr/lib/wsl exist on
+    # WSL2 only, the NVIDIA device nodes and the PCI topology on native Linux
+    # only. The policy lists all of them, so these are the only paths allowed
+    # to be missing on a host machine.
     OPTIONAL_PATH_PREFIXES = ('/dev/dxg', '/dev/nvidia', '/sys/bus/pci',
-                              '/sys/class/drm', '/sys/devices/pci')
+                              '/sys/class/drm', '/sys/devices/pci',
+                              '/usr/lib/wsl')
 
     def __init__(self):
         self._compatibility = LandLockCompatibility.BEST_EFFORT

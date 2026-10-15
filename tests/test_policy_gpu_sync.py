@@ -18,9 +18,11 @@ _GPU_READ_ONLY = [
     "/sys/bus/pci",
     "/sys/class/drm",
     "/sys/devices/pci*",
+    "/usr/lib/wsl",
 ]
 _GPU_READ_WRITE = [
     "/dev/dxg",
+    "/dev/nvidia-modeset",
     "/dev/nvidia-uvm",
     "/dev/nvidia-uvm-tools",
     "/dev/nvidia[0-9]*",
