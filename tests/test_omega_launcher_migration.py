@@ -66,7 +66,13 @@ if args[:1] == ["run"]:
             source, target = args[index + 1].split(":")[:2]
             mounts[target] = source
             index += 2
-        elif option in ("--entrypoint", "--user", "--group-add", "-e", "--name", "--security-opt", "--tmpfs"):
+        elif option == "--mount":
+            mount = dict(item.split("=", 1) for item in args[index + 1].split(",") if "=" in item)
+            mounts[mount["target"]] = mount["source"]
+            index += 2
+        elif option in (
+            "--entrypoint", "--user", "--group-add", "--network", "-e", "--name", "--security-opt", "--tmpfs"
+        ):
             if option == "--entrypoint":
                 entrypoint = args[index + 1]
             index += 2
@@ -86,6 +92,10 @@ if args[:1] == ["run"]:
         volume(source).mkdir(parents=True, exist_ok=True)
         if target == MEMORY_PATH and not any(volume(source).iterdir()):
             shutil.copytree(root / "image-memory", volume(source), dirs_exist_ok=True)
+    if entrypoint == "python3":
+        transfer_path = str(volume(mounts["/memory-transfer"]))
+        command = [argument.replace("/memory-transfer", transfer_path) for argument in command]
+        sys.exit(subprocess.run([sys.executable, *command]).returncode)
     if entrypoint == "sh" and command[:1] == ["-c"]:
         script = command[1]
         for target in sorted(mounts, key=len, reverse=True):
@@ -274,32 +284,17 @@ def test_without_old_volume_agent_starts_on_image_memory(docker_root):
     assert not (docker_root / "volumes" / "omegaclaw-memory").exists()
 
 
-def test_memory_import_skips_migration(docker_root, tmp_path):
+def test_memory_import_skips_migration(docker_root):
     _install_omegaclaw(docker_root)
-    transfer = tmp_path / "transfer"
+    transfer = docker_root / "volumes" / "omega-memory-transfer"
     transfer.mkdir()
-    transfer.chmod(0o2770)
     (transfer / "memory.tar.gz").touch()
-    python3 = docker_root.parent / "bin" / "python3"
-    python3.write_text(
-        "#!/bin/sh\n"
-        "case \"$1\" in\n"
-        "  *omega-memory-transfer-validator*) exit 0 ;;\n"
-        "esac\n"
-        f"exec {sys.executable!s} \"$@\"\n",
-        encoding="utf-8",
-    )
-    python3.chmod(0o755)
 
     result = _launcher(
         docker_root,
         "start",
         "-d",
         IMAGE,
-        "--memory-transfer-dir",
-        str(transfer),
-        "--memory-transfer-gid",
-        str(transfer.stat().st_gid),
         "--memory-import",
         "memory.tar.gz",
     )
@@ -307,6 +302,17 @@ def test_memory_import_skips_migration(docker_root, tmp_path):
     assert result.returncode == 0, result.stderr
     assert _read(docker_root / "volumes" / "omega-memory" / "history.metta") == ""
     assert _container_state(docker_root, "omegaclaw") == "running"
+
+
+def test_missing_memory_import_does_not_replace_agent_container(docker_root):
+    (docker_root / "containers" / "omega").write_text("running")
+
+    result = _launcher(docker_root, "start", "-d", IMAGE, "--memory-import", "missing.tar.gz")
+
+    assert result.returncode != 0
+    assert "archive not found or unreadable" in result.stderr
+    assert "rm -f omega" not in _calls(docker_root)
+    assert not _started_agent(docker_root)
 
 
 def test_failed_copy_restores_previous_state(docker_root):
