@@ -5,6 +5,7 @@ import sys
 import threading
 import types
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -15,12 +16,16 @@ TIMEOUT = 30
 def test_background_indexing_and_runtime_memory_share_persistent_collection(
     monkeypatch, tmp_path
 ):
-    pytest.importorskip("chromadb", reason="real Chroma integration requires chromadb")
+    chromadb = pytest.importorskip(
+        "chromadb", reason="real Chroma integration requires chromadb"
+    )
     bridge_spec = importlib.util.find_spec("lib_chromadb")
     if bridge_spec is None:
         pytest.skip("PeTTa lib_chromadb bridge is required on PYTHONPATH")
     monkeypatch.chdir(tmp_path)
     monkeypatch.syspath_prepend(str(REPO_ROOT))
+    custom_path = tmp_path / "custom-chroma"
+    monkeypatch.setenv("CHROMA_DB_PATH", str(custom_path))
     # Execute the actual bridge in an isolated directory, including its client creation.
     spec = importlib.util.spec_from_file_location("lib_chromadb", bridge_spec.origin)
     bridge = importlib.util.module_from_spec(spec)
@@ -35,6 +40,12 @@ def test_background_indexing_and_runtime_memory_share_persistent_collection(
     )
     rag = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rag)
+    client_factory = Mock(wraps=chromadb.PersistentClient)
+    monkeypatch.setattr(chromadb, "PersistentClient", client_factory)
+    monkeypatch.setenv("CHROMA_DB_PATH", str(tmp_path / "chroma_db"))
+    rag._configure_chroma_from_env()
+    client_factory.assert_not_called()
+    monkeypatch.setenv("CHROMA_DB_PATH", str(custom_path))
     monkeypatch.setattr(
         rag,
         "config_get_by_key",
@@ -58,9 +69,13 @@ def test_background_indexing_and_runtime_memory_share_persistent_collection(
 
     monkeypatch.setattr(rag, "local_embed_batch", embed)
     try:
-        assert rag._get_collection() is bridge.COLLECTION
         assert rag.init_knowledge("Local") == "Knowledge indexing started in background"
+        assert bridge.CLIENT.get_settings().persist_directory == str(custom_path)
         assert entered.wait(TIMEOUT)
+        collection = bridge.COLLECTION
+        monkeypatch.setenv("CHROMA_DB_PATH", str(tmp_path / "later-env"))
+        assert rag._get_collection() is collection is bridge.COLLECTION
+        client_factory.assert_called_once_with(path=str(custom_path))
         assert bridge.COLLECTION.count() >= 100
         time, text = bridge.query([1.0, 0.0, 0.0], 1)[0]
         assert time == "knowledge_prior" and text.startswith("prior ")

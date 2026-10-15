@@ -3,6 +3,7 @@ import re
 import glob
 import hashlib
 import threading
+from pathlib import Path
 import openai
 from   lib_llm_ext import initLocalEmbedding, useLocalEmbedding
 from src.logger import get_logger
@@ -25,6 +26,25 @@ def _get_collection():
     import lib_chromadb
 
     return lib_chromadb.COLLECTION
+
+
+def _configure_chroma_from_env():
+    """Apply the custom database path to the shared bridge before indexing."""
+    path = os.environ.get("CHROMA_DB_PATH")
+    if path is None:
+        return
+    import lib_chromadb
+
+    path = Path(path).resolve()
+    if Path(lib_chromadb.CLIENT.get_settings().persist_directory).resolve() == path:
+        return
+    import chromadb
+
+    client = chromadb.PersistentClient(path=str(path))
+    collection = client.get_or_create_collection(
+        name="memories", embedding_function=None
+    )
+    lib_chromadb.CLIENT, lib_chromadb.COLLECTION = client, collection
 
 
 # --- Helpers -------------------------------------------------------------
@@ -205,10 +225,15 @@ def init_knowledge(embedding_selection):
     with _knowledge_lock:
         if _knowledge_worker is not None and _knowledge_worker.is_alive():
             return "Knowledge indexing already running"
+        try:
+            _configure_chroma_from_env()
+        except Exception as e:
+            logger.exception(f"Knowledge init failed: {e}")
+            return f"Knowledge init failed: {e}"
         if background:
             try:
                 _knowledge_worker = threading.Thread(
-                    target=_index_knowledge,
+                    target=_index_knowledge_background,
                     args=(embedding_selection,),
                     daemon=True,
                 )
@@ -219,6 +244,10 @@ def init_knowledge(embedding_selection):
                 return f"Knowledge init failed: {e}"
             return "Knowledge indexing started in background"
     return _index_knowledge(embedding_selection)
+
+
+def _index_knowledge_background(embedding_selection):
+    logger.info(_index_knowledge(embedding_selection))
 
 
 def _index_knowledge(embedding_selection):

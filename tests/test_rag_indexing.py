@@ -17,6 +17,7 @@ TIMEOUT = 5
 
 @pytest.fixture
 def rag_fixture(monkeypatch, tmp_path):
+    monkeypatch.delenv("CHROMA_DB_PATH", raising=False)
     monkeypatch.syspath_prepend(str(REPO_ROOT))
     monkeypatch.setitem(sys.modules, "openai", SimpleNamespace())
     monkeypatch.setitem(
@@ -131,3 +132,21 @@ def test_background_failure_is_logged(rag_fixture, monkeypatch, caplog):
         record.exc_info and "provider unavailable" in record.message
         for record in caplog.records
     )
+
+
+@pytest.mark.parametrize("has_files", [True, False])
+def test_background_completion_is_logged(rag_fixture, tmp_path, caplog, has_files):
+    rag, settings, _, release, _ = rag_fixture
+    settings["knowledgeIndexingBackground"] = True
+    if not has_files:
+        (tmp_path / "guide.md").unlink()
+    release.set()
+    with caplog.at_level(logging.INFO):
+        rag.init_knowledge("Local")
+        rag._knowledge_worker.join(TIMEOUT)
+    expected = (
+        "Knowledge: 1 files (0 unchanged, 1 re-indexed)"
+        if has_files
+        else "No markdown .md files found in directory knowledge-priors, bypassing knowledge load..."
+    )
+    assert expected in caplog.messages
