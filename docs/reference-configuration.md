@@ -27,7 +27,7 @@ This resolves the value through the Python configuration layer, using command-li
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `maxFeedback` | 50000 (chars) | Ceiling on `LAST_SKILL_USE_RESULTS` text fed back into the prompt. |
+| `maxFeedback` | 50000 (chars) | Ceiling on a single tool call result text fed back into the prompt. |
 | `maxRecallItems` | 20 | Items returned by `query`. |
 | `maxEpisodeRecallLines` | 20 | Lines returned by `episodes`. |
 | `maxHistory` | 30000 (chars) | Tail of `memory/history.metta` included in the prompt. |
