@@ -190,10 +190,10 @@ Project versioning should be compatible to [Semantic versioning specification](h
 Each version consists of three numbers major, minor and patch version.
 The whole version name looks like `v<major>.<minor>.<patch>`.
 
-Patch version is incremented when small, time-sensitive changes or bug fixes are made.
-For example it is incremented when patch release is prepared (see [Patch release](#patch_release)).
-GitHub flow assumes creating a tag before release build is started and because of this it is impossible to reuse release version.
-It means that version is incremented even in case when release build is not promoted to the production.
+Patch version is incremented when small, time-sensitive changes and production fixes are made (see [Patch release](#patch_release)).
+Patch cannot include non-backward compatible changes which trigger major version change (see below).
+Once a version tag has been created for a release, its version number must not be reused, even if the release is not promoted to production.
+Each subsequent release attempt must use a new version number to avoid ambiguity and potential inconsistencies for users or automation that may already have referenced the original release tag.
 
 If release contains new functionality or features which are backward-compatible then minor version should be incremented.
 If release contains breaking or incompatible changes that require consumers to adapt then major version should be incremented.
