@@ -3,7 +3,7 @@ import json
 import re
 import hashlib
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 import os
 
 try:
@@ -14,6 +14,11 @@ except ModuleNotFoundError:  # running this file directly as a script
 logger = get_logger(__name__)
 
 TS_RE = re.compile(r'^\("(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"')
+# Consume quoted strings as whole tokens, including an unfinished final string,
+# so parentheses in message text never become structural delimiters.
+_FORM_TOKENS_RE = re.compile(r'"(?:\\.|[^"\\])*(?:"|\\?\Z)|[()]', re.DOTALL)
+_FIELD_HEAD_RE = re.compile(r'\(([^\s()"]+)(?=\s|\()\s*')
+_FIELD_VALUE_RE = re.compile(r'"(?:\\.|[^"\\])*"|[^\s()"][^\s)]*', re.DOTALL)
 LLM_COMMANDS = {
     "append-file",
     "clear-frame-junk",
@@ -117,10 +122,11 @@ def cfv2_compact_history(events_repr, limit=2400):
     events = _balanced_exprs(normalize_string(events_repr), "FrameEvent")
     lines = []
     for event in events:
-        category = _field(event, "category") or "Event"
-        kind = _field(event, "kind") or category
-        timestamp = _field(event, "timestamp") or ""
-        payload = _field(event, "payload") or ""
+        fields = _fields(event, "category", "kind", "timestamp", "payload")
+        category = fields.get("category") or "Event"
+        kind = fields.get("kind") or category
+        timestamp = fields.get("timestamp") or ""
+        payload = fields.get("payload") or ""
         timestamp = _unquote_history_string(timestamp)
         if len(payload) >= 2 and payload[0] == '"' and payload[-1] == '"':
             try:
@@ -374,151 +380,87 @@ def _unescape_repr_id(value: str) -> str:
     return value.strip()
 
 
-def _balanced_exprs(text: str, head: str) -> List[str]:
-    """Extract balanced s-expressions whose head is `head` outside strings.
+def _form_spans(text: str, offset: int = 0) -> Iterator[Tuple[int, int, int]]:
+    """Yield balanced forms as (start, end, depth), ignoring quoted contents."""
+    starts = []
+    depth = 0
+    for token in _FORM_TOKENS_RE.finditer(text, offset):
+        if token[0] == "(":
+            starts.append((token.start(), depth))
+            depth += 1
+        elif token[0] == ")":
+            depth -= 1
+            if starts:
+                start, form_depth = starts.pop()
+                yield start, token.end(), form_depth
 
-    This is a pragmatic parser for scorer/runtime helper use. It is not a full MeTTa parser,
-    but it handles quoted strings and nested parentheses well enough for Frame/FrameRef atoms.
-    """
+
+def _balanced_exprs(text: str, head: str) -> List[str]:
+    """Extract matching forms in source order, excluding nested matches."""
     text = str(text)
     token = f"({head}"
+    matches = []
+    for start, end, _ in _form_spans(text):
+        after_head = start + len(token)
+        if (
+            text.startswith(token, start)
+            and after_head < end
+            and (text[after_head].isspace() or text[after_head] == "(")
+        ):
+            matches.append((start, end))
+
     out = []
-    i = 0
-    in_str = False
-    escaped = False
-    while i < len(text):
-        ch = text[i]
-        if in_str:
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == '"':
-                in_str = False
-            i += 1
-            continue
-
-        if ch == '"':
-            in_str = True
-            i += 1
-            continue
-
-        if text.startswith(token, i):
-            after_head = i + len(token)
-            if after_head < len(text) and (text[after_head].isspace() or text[after_head] == "("):
-                start = i
-                depth = 0
-                in_expr_string = False
-                expr_escaped = False
-                for j in range(start, len(text)):
-                    expr_ch = text[j]
-                    if in_expr_string:
-                        if expr_escaped:
-                            expr_escaped = False
-                        elif expr_ch == "\\":
-                            expr_escaped = True
-                        elif expr_ch == '"':
-                            in_expr_string = False
-                        continue
-                    if expr_ch == '"':
-                        in_expr_string = True
-                    elif expr_ch == "(":
-                        depth += 1
-                    elif expr_ch == ")":
-                        depth -= 1
-                        if depth == 0:
-                            out.append(text[start : j + 1])
-                            i = j + 1
-                            break
-                else:
-                    i += len(token)
-                continue
-
-        i += 1
+    previous_end = 0
+    for start, end in sorted(matches):
+        if start >= previous_end:
+            out.append(text[start:end])
+            previous_end = end
     return out
+
+
+def _field_value(expr: str, start: int) -> Optional[str]:
+    """Read one quoted, nested, or bare value without decoding it."""
+    if expr.startswith("(", start):
+        end = next((end for _, end, depth in _form_spans(expr, start) if depth == 0), None)
+        return expr[start:end] if end is not None else None
+    value = _FIELD_VALUE_RE.match(expr, start)
+    if value is not None:
+        return value[0]
+    return "" if start < len(expr) and expr[start] != '"' else None
+
+
+def _fields(expr: str, *field_names: str) -> Dict[str, str]:
+    """Read requested direct-child fields once, keeping each name's first value."""
+    expr = str(expr)
+    fields = {}
+    remaining = set(field_names)
+    depth = 0
+    for token in _FORM_TOKENS_RE.finditer(expr):
+        if token[0] == ")":
+            depth -= 1
+            continue
+        if token[0] != "(":
+            continue
+        depth += 1
+        if depth != 2:
+            continue
+        head = _FIELD_HEAD_RE.match(expr, token.start())
+        if head is None or head[1] not in remaining:
+            continue
+        name = head[1]
+        value = _field_value(expr, head.end())
+        if value is not None:
+            fields[name] = value
+        remaining.remove(name)
+        if not remaining:
+            break
+    return fields
 
 
 def _field(expr: str, field_name: str) -> Optional[str]:
     """Return the raw value of a direct child `(field value)` form."""
-    expr = str(expr)
-    pattern = f"({field_name}"
-    depth = 0
-    in_str = False
-    escaped = False
-    i = 0
-    while i < len(expr):
-        ch = expr[i]
-        if in_str:
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == '"':
-                in_str = False
-            i += 1
-            continue
+    return _fields(expr, field_name).get(field_name)
 
-        if ch == '"':
-            in_str = True
-            i += 1
-            continue
-
-        if ch == "(" and depth == 1 and expr.startswith(pattern, i):
-            after_name = i + len(pattern)
-            if after_name < len(expr) and (expr[after_name].isspace() or expr[after_name] == "("):
-                start = after_name
-                while start < len(expr) and expr[start].isspace():
-                    start += 1
-                if start >= len(expr):
-                    return None
-
-                if expr[start] == '"':
-                    value_escaped = False
-                    for end in range(start + 1, len(expr)):
-                        value_ch = expr[end]
-                        if value_escaped:
-                            value_escaped = False
-                        elif value_ch == "\\":
-                            value_escaped = True
-                        elif value_ch == '"':
-                            return expr[start : end + 1]
-                    return None
-
-                if expr[start] == "(":
-                    value_depth = 0
-                    value_in_str = False
-                    value_escaped = False
-                    for end in range(start, len(expr)):
-                        value_ch = expr[end]
-                        if value_in_str:
-                            if value_escaped:
-                                value_escaped = False
-                            elif value_ch == "\\":
-                                value_escaped = True
-                            elif value_ch == '"':
-                                value_in_str = False
-                            continue
-                        if value_ch == '"':
-                            value_in_str = True
-                        elif value_ch == "(":
-                            value_depth += 1
-                        elif value_ch == ")":
-                            value_depth -= 1
-                            if value_depth == 0:
-                                return expr[start : end + 1]
-                    return None
-
-                end = start
-                while end < len(expr) and not expr[end].isspace() and expr[end] != ")":
-                    end += 1
-                return expr[start:end]
-
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth -= 1
-        i += 1
-    return None
 
 def cfv2_refs_completed_after(index_repr, date_prefix) -> str:
     """Return completed FrameRefs whose completed-timestamp starts with or compares after date_prefix.
@@ -528,8 +470,9 @@ def cfv2_refs_completed_after(index_repr, date_prefix) -> str:
     prefix = _unescape_repr_id(date_prefix)
     refs = []
     for ref in _balanced_exprs(str(index_repr), "FrameRef"):
-        status = _unescape_repr_id(_field(ref, "status") or "")
-        t = _unescape_repr_id(_field(ref, "completed-timestamp") or "")
+        fields = _fields(ref, "status", "completed-timestamp")
+        status = _unescape_repr_id(fields.get("status") or "")
+        t = _unescape_repr_id(fields.get("completed-timestamp") or "")
         if status == "Completed" and t and t >= prefix:
             refs.append(ref)
     return "(" + " ".join(refs) + ")"
@@ -543,11 +486,12 @@ def cfv2_select_next_frame_id(index_repr, root_mode="Fast") -> str:
     mode = _unescape_repr_id(root_mode)
     latest: Dict[str, Tuple[float, str, str, str]] = {}
     for ref in _balanced_exprs(str(index_repr), "FrameRef"):
-        fid = _unescape_repr_id(_field(ref, "frameID") or "")
-        status = _unescape_repr_id(_field(ref, "status") or "")
-        frame_mode = _unescape_repr_id(_field(ref, "frame-mode") or "")
-        space = _unescape_repr_id(_field(ref, "space") or "")
-        priority_raw = _unescape_repr_id(_field(ref, "priority") or "0")
+        fields = _fields(ref, "frameID", "status", "frame-mode", "space", "priority")
+        fid = _unescape_repr_id(fields.get("frameID") or "")
+        status = _unescape_repr_id(fields.get("status") or "")
+        frame_mode = _unescape_repr_id(fields.get("frame-mode") or "")
+        space = _unescape_repr_id(fields.get("space") or "")
+        priority_raw = _unescape_repr_id(fields.get("priority") or "0")
         try:
             priority = float(priority_raw)
         except Exception:
