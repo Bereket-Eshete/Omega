@@ -101,11 +101,11 @@ for setup, export controls, archive contents, and import modes.
 > entrypoint before the agent loop starts.
 
 Archives are stored in the Docker volume `omega-memory-transfer`. Use the
-launcher to list, download, or upload them; no host directory or group setup is
-required. The archive volume survives `scripts/omega clean`.
+launcher to list, download, upload, or delete them; no host directory or group
+setup is required. The archive volume survives `scripts/omega clean`.
 
-To restore a host archive while upgrading, use an image you have already built
-or downloaded and replace the archive filename below with your own:
+To restore a host archive while upgrading, choose the target image and replace
+the archive filename below with your own. Missing images are pulled automatically:
 
 ```sh
 image="singularitynet/omega:<tag>"

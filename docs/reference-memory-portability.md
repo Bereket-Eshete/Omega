@@ -24,14 +24,17 @@ scripts/omega start -p OpenAI -t telegram \
 ```
 
 `--enable-memory-export` is required because export is disabled by default.
+The agent mounts the archive volume only when export is enabled or
+`--memory-import` is requested. Import does not require enabling export.
 To use a different archive volume, pass `--memory-transfer-volume <name>` to
 startup and each archive command. A volume name is required, not a host path.
 The live-memory volume names `omega-memory` and `omegaclaw-memory` are reserved.
 
 Archive commands use a temporary helper container from the selected image;
-they work without a running agent and do not require API keys. The image must
-already be available locally. Pass `-d <image>` if you use a custom image such
-as `omega:dev`; the default is `singularitynet/omega:latest`.
+they work without a running agent and do not require API keys. Docker uses the
+local image when available and pulls it automatically if missing. Pass
+`-d <image>` to select an image, including a locally built `omega:dev`;
+the default is `singularitynet/omega:latest`.
 
 ## Export
 
@@ -77,7 +80,7 @@ not exported. SHA-256 detects corruption, not archive authorship.
 ## Import
 
 Import is an administrative startup operation. Upload a host archive into the
-volume first, using an image that is already available locally:
+volume first:
 
 ```sh
 image="singularitynet/omega:<tag>"
@@ -111,7 +114,7 @@ running again on container restart.
 ## Security
 
 Archives are private operator data. Keep downloaded host copies protected and
-use the launcher to access the volume. Upload/download helpers run as `nobody`
+use the launcher to access the volume. Archive helpers run as `nobody`
 and mount only the archive volume. The agent's Landlock policy is preserved.
 The root entrypoint continues to initialize Nginx and startup services normally.
 Memory export is denied when channel authentication is disabled, no authenticated
@@ -120,7 +123,15 @@ channel user has been persisted, or WebSocket has no `WS_TOKEN`.
 ## Persistence and migration
 
 Archives survive container stops, recreation, and `scripts/omega clean`.
-`clean` still removes the agent's live memory volume. Remove the archive volume
+`clean` still removes the agent's live memory volume. To permanently delete one
+archive, use its plain filename:
+
+```sh
+scripts/omega memory-delete "$archive"
+```
+
+This deletes only the named archive from the selected transfer volume. Other
+archives and live memory are preserved. Remove the archive volume
 explicitly with `docker volume rm omega-memory-transfer` only when you no longer
 need its contents and no container is using it.
 
