@@ -872,7 +872,7 @@ with tempfile.TemporaryDirectory(prefix=".upload-", dir=path.parent) as staging:
     with temporary.open("xb") as archive:
         shutil.copyfileobj(sys.stdin.buffer, archive)
         if archive.tell() != int(sys.argv[2]):
-            raise ValueError("Archive upload was incomplete")
+            raise SystemExit("Archive upload was incomplete")
     directory_fd = os.open(path.parent, os.O_RDONLY)
     try:
         fcntl.flock(directory_fd, fcntl.LOCK_EX)
