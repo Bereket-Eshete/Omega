@@ -508,6 +508,7 @@ help() {
     echo -e "\tmemory-list list available memory archives"
     echo -e "\tmemory-upload <host-archive> copy an archive into the transfer volume"
     echo -e "\tmemory-download <filename> <host-destination> copy an archive to your computer"
+    echo -e "\tmemory-delete <filename> delete an archive from the transfer volume"
     echo
     echo -e "Options:"
     echo -e "\t-s <auth secret> set secret for the communication channel (default is 0000)"
@@ -628,7 +629,9 @@ options() {
             --version|-v) version; exit 0;;
             --help|-h) help; exit 0;;
             *)
-                if [[ ( "${command}" == "memory-upload" || "${command}" == "memory-download" ) && "${1}" != -* ]]; then
+                if [[ ( "${command}" == "memory-upload" ||
+                        "${command}" == "memory-download" ||
+                        "${command}" == "memory-delete" ) && "${1}" != -* ]]; then
                     memory_archive_arguments+=("${1}")
                     shift
                 else
@@ -656,6 +659,11 @@ options() {
     if [[ "${command}" == "memory-download" &&
           ( -z "${memory_archive_arguments[*]+set}" || "${#memory_archive_arguments[@]}" != "2" ) ]]; then
         echo "memory-download requires an archive filename and a host destination" >&2
+        return 1
+    fi
+    if [[ "${command}" == "memory-delete" &&
+          ( -z "${memory_archive_arguments[*]+set}" || "${#memory_archive_arguments[@]}" != "1" ) ]]; then
+        echo "memory-delete requires one archive filename" >&2
         return 1
     fi
 
@@ -799,7 +807,7 @@ migrate_omegaclaw_memory() {
 }
 
 prepare_memory_transfer_volume() {
-    docker run --rm --pull=never --network none --read-only --user 0:0 \
+    docker run --rm --pull=missing --network none --read-only --user 0:0 \
         --entrypoint /bin/sh \
         --mount "type=volume,source=${memory_transfer_volume_name},target=/memory-transfer" \
         "${image}" -c 'chown 65534:65534 /memory-transfer && chmod 0700 /memory-transfer'
@@ -822,7 +830,7 @@ memory_transfer_run() {
     else
         input=(-i)
     fi
-    docker run --rm --pull=never --network none --read-only --user 65534:65534 \
+    docker run --rm --pull=missing --network none --read-only --user 65534:65534 \
         --security-opt no-new-privileges:true \
         ${input[@]+"${input[@]}"} --mount "${mount}" \
         --entrypoint python3 "${image}" -B "$@"
@@ -920,9 +928,26 @@ with path.open("rb") as archive:
     echo "Downloaded ${destination}"
 }
 
+memory_delete() {
+    local filename="${memory_archive_arguments[0]}"
+    validate_memory_archive_name "${filename}" || return 1
+    require_memory_transfer_volume
+    memory_transfer_run rw -c '
+from pathlib import Path
+import sys
+
+path = Path("/memory-transfer") / sys.argv[1]
+if path.is_symlink() or not path.is_file():
+    raise SystemExit(f"Archive not found: {path.name}")
+path.unlink()
+' "${filename}"
+    echo "Deleted ${filename} from ${memory_transfer_volume_name}"
+}
+
 start() {
     container_log_config_path=""
     log_config_volume=()
+    memory_transfer_volume=()
     memory_import_env=()
     memory_export_option=()
 
@@ -939,8 +964,9 @@ start() {
 
     docker pull "${image}" 2>/dev/null || true
 
-    prepare_memory_transfer_volume || return 1
-    if ! memory_transfer_run rw -c '
+    if [[ "${memory_export_enabled}" == "1" || -n "${memory_import_file}" ]]; then
+        prepare_memory_transfer_volume || return 1
+        if ! memory_transfer_run rw -c '
 import os
 from pathlib import Path
 import sys
@@ -953,7 +979,9 @@ if sys.argv[1]:
     if archive.is_symlink() or not archive.is_file() or not os.access(archive, os.R_OK):
         raise SystemExit(f"--memory-import archive not found or unreadable: {archive.name}")
 ' "${memory_import_file}"; then
-        return 1
+            return 1
+        fi
+        memory_transfer_volume=(--mount "type=volume,source=${memory_transfer_volume_name},target=/memory-transfer")
     fi
 
     if [[ -n "${memory_import_file}" && "${memory_import_mode}" == "overwrite" ]]; then
@@ -992,7 +1020,7 @@ if sys.argv[1]:
             --tmpfs /run:size=16m,mode=755
             --volume omega-memory:/PeTTa/repos/Omega/memory
             ${log_config_volume[@]+"${log_config_volume[@]}"}
-            --mount "type=volume,source=${memory_transfer_volume_name},target=/memory-transfer"
+            ${memory_transfer_volume[@]+"${memory_transfer_volume[@]}"}
             -e "${api_token_var}"="${api_token}"
             -e "TG_BOT_TOKEN=${TG_BOT_TOKEN:-}"
             -e "SL_BOT_TOKEN=${SL_BOT_TOKEN:-}"
@@ -1064,6 +1092,7 @@ case "${command}" in
     memory-list) memory_list ;;
     memory-upload) memory_upload ;;
     memory-download) memory_download ;;
+    memory-delete) memory_delete ;;
     --version|-v) version ;;
     -h|--help) help ;;
     *) image="${command}"
