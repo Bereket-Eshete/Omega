@@ -116,9 +116,16 @@ def test_installer_preserves_volume_and_explicit_export_setting(tmp_path, monkey
     assert f"memory_export_enabled={enabled}\n" in config
 
 
-def test_launcher_mounts_named_transfer_volume_for_nonroot_agent(tmp_path):
+@pytest.mark.parametrize("export_enabled", [False, True])
+@pytest.mark.parametrize("memory_import", [False, True])
+def test_launcher_mounts_archive_volume_only_for_export_or_import(
+    tmp_path, export_enabled, memory_import
+):
+    options = ["--memory-transfer-volume", "test-archives"]
+    if export_enabled:
+        options.append("--enable-memory-export")
     result = _run_launcher(
-        tmp_path, "--memory-transfer-volume", "test-archives", "--enable-memory-export", memory_import=False
+        tmp_path, *options, memory_import=memory_import
     )
 
     assert result.returncode == 0, result.stderr
@@ -126,9 +133,16 @@ def test_launcher_mounts_named_transfer_volume_for_nonroot_agent(tmp_path):
         line for line in result.stdout.splitlines()
         if line.startswith("docker <run> ") and "<--name> <omega>" in line
     )
-    assert "<type=volume,source=test-archives,target=/memory-transfer>" in agent_run
-    assert "<--user> <65534:65534>" in result.stdout
-    assert "<memoryExportEnabled=true>" in agent_run
+    uses_archive_volume = export_enabled or memory_import
+    assert (
+        "<type=volume,source=test-archives,target=/memory-transfer>" in agent_run
+    ) == uses_archive_volume
+    if uses_archive_volume:
+        assert "<--user> <65534:65534>" in result.stdout
+    else:
+        assert "/memory-transfer" not in result.stdout
+    assert ("<memoryExportEnabled=true>" in agent_run) == export_enabled
+    assert ("<MEMORY_IMPORT_FILE=memory.tar.gz>" in agent_run) == memory_import
     assert "MEMORY_TRANSFER_GID" not in result.stdout
 
 
@@ -169,9 +183,14 @@ def test_clean_preserves_memory_archives(tmp_path):
     assert "omega-memory-transfer" not in result.stdout
 
 
-def test_download_rejects_archive_path_traversal(tmp_path):
+@pytest.mark.parametrize("command", ["memory-download", "memory-delete"])
+@pytest.mark.parametrize("filename", ["../memory.tar.gz", "/tmp/memory.tar.gz", "*.tar.gz", "memory.txt"])
+def test_archive_commands_reject_invalid_filenames(tmp_path, command, filename):
+    arguments = [filename]
+    if command == "memory-download":
+        arguments.append(str(tmp_path / "download"))
     result = subprocess.run(
-        [str(LAUNCHER), "memory-download", "../memory.tar.gz", str(tmp_path / "download")],
+        [str(LAUNCHER), command, *arguments],
         env=_stub_docker_environment(tmp_path), capture_output=True, text=True,
     )
 
@@ -180,7 +199,7 @@ def test_download_rejects_archive_path_traversal(tmp_path):
     assert "docker <" not in result.stdout
 
 
-@pytest.mark.parametrize("command", ["memory-upload", "memory-download"])
+@pytest.mark.parametrize("command", ["memory-upload", "memory-download", "memory-delete"])
 def test_archive_commands_require_arguments_before_docker(tmp_path, command):
     result = subprocess.run(
         [str(LAUNCHER), command], env=_stub_docker_environment(tmp_path),
@@ -189,6 +208,17 @@ def test_archive_commands_require_arguments_before_docker(tmp_path, command):
 
     assert result.returncode != 0
     assert f"{command} requires" in result.stderr
+    assert "docker <" not in result.stdout
+
+
+def test_memory_delete_rejects_extra_filenames(tmp_path):
+    result = subprocess.run(
+        [str(LAUNCHER), "memory-delete", "first.tar.gz", "second.tar.gz"],
+        env=_stub_docker_environment(tmp_path), capture_output=True, text=True,
+    )
+
+    assert result.returncode != 0
+    assert "memory-delete requires one archive filename" in result.stderr
     assert "docker <" not in result.stdout
 
 
@@ -340,6 +370,20 @@ def test_memory_volume_upload_download_round_trip(tmp_path):
         failed = run("memory-download", "missing.tar.gz", missing)
         assert failed.returncode != 0
         assert not missing.exists()
+
+        kept = directory / "kept.tar.gz"
+        kept.write_bytes(original)
+        uploaded = run("memory-upload", kept)
+        assert uploaded.returncode == 0, uploaded.stderr
+        deleted = run("memory-delete", source.name)
+        assert deleted.returncode == 0, deleted.stderr
+        listed = run("memory-list")
+        assert listed.returncode == 0, listed.stderr
+        assert listed.stdout.strip() == kept.name
+        kept_destination = directory / "kept copy.tar.gz"
+        downloaded = run("memory-download", kept.name, kept_destination)
+        assert downloaded.returncode == 0, downloaded.stderr
+        assert kept_destination.read_bytes() == original
     finally:
         subprocess.run(["docker", "volume", "rm", volume], capture_output=True, check=False)
 
@@ -371,7 +415,7 @@ def test_only_component_options_are_mutually_exclusive(tmp_path):
     assert "--only-history and --only-vector cannot be combined" in result.stderr
 
 
-@pytest.mark.parametrize("command", ["start", "stop", "clean", "memory-download"])
+@pytest.mark.parametrize("command", ["start", "stop", "clean", "memory-download", "memory-delete"])
 @pytest.mark.parametrize(
     ("flag", "expected_output"),
     [
