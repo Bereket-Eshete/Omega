@@ -101,14 +101,15 @@ for setup, export controls, archive contents, and import modes.
 > entrypoint before the agent loop starts.
 
 To restore an archive while upgrading to a tagged image on Linux, use the same
-prepared transfer directory. Its group ID is required by the launcher:
+prepared transfer directory and its group ID. Replace the archive filename
+below with the one returned by export:
 
 ```sh
 transfer_gid="$(stat -c %g "$HOME/omega-transfers")"
-scripts/omega start -d singularitynet/omega:<tag> -p OpenAI -t telegram \
+scripts/omega start -d "singularitynet/omega:<tag>" -p OpenAI -t telegram \
   --memory-transfer-dir "$HOME/omega-transfers" \
   --memory-transfer-gid "$transfer_gid" \
-  --memory-import omega-memory-<timestamp>.tar.gz \
+  --memory-import "omega-memory-<UTC timestamp>-<ID>.tar.gz" \
   --memory-mode overwrite
 ```
 

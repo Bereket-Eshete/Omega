@@ -58,6 +58,10 @@ token so the credential itself is never used as an identifier:
 Completion is delivered through the active channel and includes the filename,
 record count, size, and SHA-256.
 
+Archive names use `omega-memory-<UTC timestamp>-<ID>.tar.gz`, where the ID is
+eight hexadecimal characters derived from UUIDv4. Use the returned filename
+when importing an archive.
+
 Archives contain selected persistent user memory only:
 
 ```text
@@ -77,10 +81,10 @@ Import is an administrative startup operation. The archive argument is a plain
 filename in the chosen transfer directory:
 
 ```sh
-scripts/omega start -d singularitynet/omega:<tag> -p OpenAI -t telegram \
+scripts/omega start -d "singularitynet/omega:<tag>" -p OpenAI -t telegram \
   --memory-transfer-dir "$HOME/omega-transfers" \
   --memory-transfer-gid "$transfer_gid" \
-  --memory-import omegaclaw-memory-<timestamp>.tar.gz \
+  --memory-import "omega-memory-<UTC timestamp>-<ID>.tar.gz" \
   --memory-mode overwrite
 ```
 
