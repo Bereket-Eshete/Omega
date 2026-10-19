@@ -3,7 +3,7 @@ import json
 import re
 import hashlib
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 import os
 
 try:
@@ -14,6 +14,11 @@ except ModuleNotFoundError:  # running this file directly as a script
 logger = get_logger(__name__)
 
 TS_RE = re.compile(r'^\("(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"')
+# Consume quoted strings as whole tokens, including an unfinished final string,
+# so parentheses in message text never become structural delimiters.
+_FORM_TOKENS_RE = re.compile(r'"(?:\\.|[^"\\])*(?:"|\\?\Z)|[()]', re.DOTALL)
+_FIELD_HEAD_RE = re.compile(r'\(([^\s()"]+)(?=\s|\()\s*')
+_FIELD_VALUE_RE = re.compile(r'"(?:\\.|[^"\\])*"|[^\s()"][^\s)]*', re.DOTALL)
 LLM_COMMANDS = {
     "append-file",
     "clear-frame-junk",
@@ -70,6 +75,98 @@ def compact_plain(value, limit=1200):
         compact = compact[: int(limit) - 3].rstrip() + "..."
 
     return f"sha256:{digest[:16]} chars:{len(text)} excerpt:{compact}"
+
+
+def _unquote_history_string(value):
+    """Remove S-expression quotes and only decode escaped quotes/backslashes."""
+    text = str(value)
+    if len(text) < 2 or text[0] not in ('"', "'") or text[-1] != text[0]:
+        return text
+    inner = text[1:-1]
+    out = []
+    i = 0
+    while i < len(inner):
+        if inner[i] == "\\" and i + 1 < len(inner) and inner[i + 1] in ('"', "'", "\\"):
+            out.append(inner[i + 1])
+            i += 2
+        else:
+            out.append(inner[i])
+            i += 1
+    return "".join(out)
+
+
+def cfv2_history_payload(value, limit=900):
+    """Normalize, cap, and JSON-quote a payload for safe MeTTa event storage."""
+    text = normalize_string(value).strip()
+    text = _unquote_history_string(text)
+    text = re.sub(r"\s+", " ", text).strip()
+    limit = max(0, int(limit))
+    if len(text) <= limit:
+        compact = text
+    elif limit <= 3:
+        compact = text[:limit]
+    else:
+        compact = text[: limit - 3].rstrip() + "..."
+    # The caller stores this value directly in a FrameEvent field. Returning a
+    # JSON string literal keeps whitespace and escaped characters parseable
+    # without routing the payload through MeTTa's swrite function.
+    return json.dumps(compact, ensure_ascii=False)
+
+
+def cfv2_compact_history(events_repr, limit=2400):
+    """Format the newest frame events into a plain-text summary within `limit`."""
+    limit = max(0, int(limit))
+    if limit == 0:
+        return ""
+
+    events = _balanced_exprs(normalize_string(events_repr), "FrameEvent")
+    lines = []
+    for event in events:
+        fields = _fields(event, "category", "kind", "timestamp", "payload")
+        category = fields.get("category") or "Event"
+        kind = fields.get("kind") or category
+        timestamp = fields.get("timestamp") or ""
+        payload = fields.get("payload") or ""
+        timestamp = _unquote_history_string(timestamp)
+        if len(payload) >= 2 and payload[0] == '"' and payload[-1] == '"':
+            try:
+                payload = json.loads(payload)
+            except (TypeError, ValueError):
+                payload = _unquote_history_string(payload)
+        else:
+            payload = _unquote_history_string(payload)
+        payload = re.sub(r"\s+", " ", payload).strip()
+        stamp = f" [{timestamp}]" if timestamp else ""
+        lines.append(f"{category}/{kind}{stamp}: {payload}")
+
+    # Preserve recent context first when space is limited, but render the result
+    # in chronological order for readability.
+    selected = []
+    used = 0
+    for line in reversed(lines):
+        separator = 1 if selected else 0
+        remaining = limit - used - separator
+        if remaining <= 0:
+            break
+        if len(line) > remaining:
+            # Older events should be omitted rather than included as a broken
+            # fragment. If the newest event alone exceeds the limit, retain its
+            # header and end the payload with an ellipsis at a word boundary.
+            if selected:
+                break
+            header, delimiter, payload = line.partition(": ")
+            marker = "..."
+            payload_budget = remaining - len(header) - len(delimiter) - len(marker)
+            if not delimiter or payload_budget <= 0:
+                break
+            excerpt = payload[:payload_budget].rstrip()
+            if len(excerpt) < len(payload):
+                excerpt = excerpt.rsplit(" ", 1)[0] if " " in excerpt else ""
+            line = f"{header}: {excerpt}{marker}"
+        selected.append(line)
+        used += len(line) + separator
+    selected.reverse()
+    return "\n".join(selected)
 
 
 def make_id(prefix="id"):
@@ -283,104 +380,87 @@ def _unescape_repr_id(value: str) -> str:
     return value.strip()
 
 
-def _balanced_exprs(text: str, head: str) -> List[str]:
-    """Extract top-level balanced s-expressions whose head is `head`.
-
-    This is a pragmatic parser for scorer/runtime helper use. It is not a full MeTTa parser,
-    but it handles strings and nested parentheses well enough for Frame/FrameRef atoms.
-    """
-    text = str(text)
+def _form_spans(text: str, offset: int = 0) -> Iterator[Tuple[int, int, int]]:
+    """Yield balanced forms as (start, end, depth), ignoring quoted contents."""
     starts = []
+    depth = 0
+    for token in _FORM_TOKENS_RE.finditer(text, offset):
+        if token[0] == "(":
+            starts.append((token.start(), depth))
+            depth += 1
+        elif token[0] == ")":
+            depth -= 1
+            if starts:
+                start, form_depth = starts.pop()
+                yield start, token.end(), form_depth
+
+
+def _balanced_exprs(text: str, head: str) -> List[str]:
+    """Extract matching forms in source order, excluding nested matches."""
+    text = str(text)
     token = f"({head}"
-    i = 0
-    while True:
-        idx = text.find(token, i)
-        if idx < 0:
-            break
-        starts.append(idx)
-        i = idx + len(token)
+    matches = []
+    for start, end, _ in _form_spans(text):
+        after_head = start + len(token)
+        if (
+            text.startswith(token, start)
+            and after_head < end
+            and (text[after_head].isspace() or text[after_head] == "(")
+        ):
+            matches.append((start, end))
 
     out = []
-    for start in starts:
-        depth = 0
-        in_str = False
-        escaped = False
-        for j in range(start, len(text)):
-            ch = text[j]
-            if in_str:
-                if escaped:
-                    escaped = False
-                elif ch == "\\":
-                    escaped = True
-                elif ch == '"':
-                    in_str = False
-                continue
-            if ch == '"':
-                in_str = True
-            elif ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                if depth == 0:
-                    out.append(text[start : j + 1])
-                    break
+    previous_end = 0
+    for start, end in sorted(matches):
+        if start >= previous_end:
+            out.append(text[start:end])
+            previous_end = end
     return out
 
 
-def _field(expr: str, field_name: str) -> Optional[str]:
-    """Return the raw value of a first-level-ish `(field value)` form.
+def _field_value(expr: str, start: int) -> Optional[str]:
+    """Read one quoted, nested, or bare value without decoding it."""
+    if expr.startswith("(", start):
+        end = next((end for _, end, depth in _form_spans(expr, start) if depth == 0), None)
+        return expr[start:end] if end is not None else None
+    value = _FIELD_VALUE_RE.match(expr, start)
+    if value is not None:
+        return value[0]
+    return "" if start < len(expr) and expr[start] != '"' else None
 
-    This intentionally works on the stable constructor format emitted by the MeTTa code.
-    """
-    pattern = f"({field_name}"
-    idx = expr.find(pattern)
-    if idx < 0:
-        return None
-    start = idx + len(pattern)
-    # Skip whitespace.
-    while start < len(expr) and expr[start].isspace():
-        start += 1
-    if start >= len(expr):
-        return None
-    if expr[start] == "(":
-        depth = 0
-        in_str = False
-        escaped = False
-        for j in range(start, len(expr)):
-            ch = expr[j]
-            if in_str:
-                if escaped:
-                    escaped = False
-                elif ch == "\\":
-                    escaped = True
-                elif ch == '"':
-                    in_str = False
-                continue
-            if ch == '"':
-                in_str = True
-            elif ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                if depth == 0:
-                    return expr[start : j + 1]
-        return None
-    if expr[start] == '"':
-        escaped = False
-        for j in range(start + 1, len(expr)):
-            ch = expr[j]
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == '"':
-                return expr[start : j + 1]
-        return None
-    # Atom/number until whitespace or close paren.
-    end = start
-    while end < len(expr) and not expr[end].isspace() and expr[end] != ")":
-        end += 1
-    return expr[start:end]
+
+def _fields(expr: str, *field_names: str) -> Dict[str, str]:
+    """Read requested direct-child fields once, keeping each name's first value."""
+    expr = str(expr)
+    fields = {}
+    remaining = set(field_names)
+    depth = 0
+    for token in _FORM_TOKENS_RE.finditer(expr):
+        if token[0] == ")":
+            depth -= 1
+            continue
+        if token[0] != "(":
+            continue
+        depth += 1
+        if depth != 2:
+            continue
+        head = _FIELD_HEAD_RE.match(expr, token.start())
+        if head is None or head[1] not in remaining:
+            continue
+        name = head[1]
+        value = _field_value(expr, head.end())
+        if value is not None:
+            fields[name] = value
+        remaining.remove(name)
+        if not remaining:
+            break
+    return fields
+
+
+def _field(expr: str, field_name: str) -> Optional[str]:
+    """Return the raw value of a direct child `(field value)` form."""
+    return _fields(expr, field_name).get(field_name)
+
 
 def cfv2_refs_completed_after(index_repr, date_prefix) -> str:
     """Return completed FrameRefs whose completed-timestamp starts with or compares after date_prefix.
@@ -390,8 +470,9 @@ def cfv2_refs_completed_after(index_repr, date_prefix) -> str:
     prefix = _unescape_repr_id(date_prefix)
     refs = []
     for ref in _balanced_exprs(str(index_repr), "FrameRef"):
-        status = _unescape_repr_id(_field(ref, "status") or "")
-        t = _unescape_repr_id(_field(ref, "completed-timestamp") or "")
+        fields = _fields(ref, "status", "completed-timestamp")
+        status = _unescape_repr_id(fields.get("status") or "")
+        t = _unescape_repr_id(fields.get("completed-timestamp") or "")
         if status == "Completed" and t and t >= prefix:
             refs.append(ref)
     return "(" + " ".join(refs) + ")"
@@ -405,11 +486,12 @@ def cfv2_select_next_frame_id(index_repr, root_mode="Fast") -> str:
     mode = _unescape_repr_id(root_mode)
     latest: Dict[str, Tuple[float, str, str, str]] = {}
     for ref in _balanced_exprs(str(index_repr), "FrameRef"):
-        fid = _unescape_repr_id(_field(ref, "frameID") or "")
-        status = _unescape_repr_id(_field(ref, "status") or "")
-        frame_mode = _unescape_repr_id(_field(ref, "frame-mode") or "")
-        space = _unescape_repr_id(_field(ref, "space") or "")
-        priority_raw = _unescape_repr_id(_field(ref, "priority") or "0")
+        fields = _fields(ref, "frameID", "status", "frame-mode", "space", "priority")
+        fid = _unescape_repr_id(fields.get("frameID") or "")
+        status = _unescape_repr_id(fields.get("status") or "")
+        frame_mode = _unescape_repr_id(fields.get("frame-mode") or "")
+        space = _unescape_repr_id(fields.get("space") or "")
+        priority_raw = _unescape_repr_id(fields.get("priority") or "0")
         try:
             priority = float(priority_raw)
         except Exception:
