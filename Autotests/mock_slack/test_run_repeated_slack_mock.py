@@ -25,7 +25,7 @@ EXPECTED_RUNS = 10
 
 def test_run_repeated_slack_mock(llm, sl):
     with Checker("run repeated script (slack mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: run 10x slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: run 10x slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -49,7 +49,7 @@ def test_run_repeated_slack_mock(llm, sl):
             f"a row. The script appends a date line to {OUTPUT_FILE} each "
             "time it runs.",
         )
-        repeated = " ".join(f'(shell "sh {SCRIPT_FILE}")' for _ in range(EXPECTED_RUNS))
+        repeated = [("shell", { "cmd":  f"sh {SCRIPT_FILE}" }) for _ in range(EXPECTED_RUNS)]
         llm.set_answer(prompt, repeated)
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")

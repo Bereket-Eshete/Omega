@@ -32,7 +32,7 @@ NEGATION_PHRASES = [
 
 def test_search_invalid_slack_mock(llm, sl):
     with Checker("search invalid (slack mock)") as c:
-        print(f"\n=== OmegaClaw: invalid search slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: invalid search slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("send prompt via Slack with mocked negation response")
@@ -43,8 +43,10 @@ def test_search_invalid_slack_mock(llm, sl):
         )
         llm.set_answer(
             prompt,
-            f'(send "No results found for {GIBBERISH}. The string appears to '
-            f'be gibberish вЂ” no meaningful matches.")',
+            [
+                ("send", { "content": f"No results found for {GIBBERISH}. The string appears to "
+                          "be gibberish вЂ” no meaningful matches." }),
+            ]
         )
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")

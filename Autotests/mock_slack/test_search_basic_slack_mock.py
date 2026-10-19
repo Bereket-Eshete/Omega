@@ -29,7 +29,7 @@ SINGULARITYNET_DESCRIPTION = (
 
 def test_search_basic_slack_mock(llm, sl):
     with Checker("search singularitynet (slack mock)") as c:
-        print(f"\n=== OmegaClaw: basic search slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: basic search slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("send prompt via Slack with mocked send response")
@@ -37,7 +37,7 @@ def test_search_basic_slack_mock(llm, sl):
             c.run_id,
             "What is SingularityNet? Search the web and give me a short description.",
         )
-        llm.set_answer(prompt, f'(send "{SINGULARITYNET_DESCRIPTION}")')
+        llm.set_answer(prompt, [("send", { "content": f"{SINGULARITYNET_DESCRIPTION}" })])
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")
 

@@ -1,5 +1,5 @@
 """
-WebSocket variant of test_create_file: OmegaClaw creates hello.txt with content
+WebSocket variant of test_create_file: Omega creates hello.txt with content
 "Hello" in /tmp/testcat. Skill smoke over the WebSocket transport.
 
 Run:
@@ -20,7 +20,7 @@ WAIT = 30
 
 def test_hello_file_ws_mock(llm, ws):
     with Checker("create hello.txt", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw smoke test (run-id {c.run_id}) ===", flush=True)
+        print(f"\n=== Omega smoke test (run-id {c.run_id}) ===", flush=True)
 
         c.step("wait for agent WebSocket connection")
         if not ws.wait_for_connection(timeout=60):
@@ -37,7 +37,10 @@ def test_hello_file_ws_mock(llm, ws):
             f"Please overwrite {TARGET_FILE} so it contains exactly the single "
             "word Hello (no quotes, no extra newlines, create the directory if needed).",
         )
-        llm.set_answer(prompt, f'(shell "mkdir -p /tmp/testcat") (write-file "/tmp/testcat/hello.txt" "Hello")')
+        llm.set_answer(prompt, [
+            ("shell", { "cmd": "mkdir -p /tmp/testcat" }),
+            ("write-file", { "filename": "/tmp/testcat/hello.txt", "content": "Hello" }),
+        ])
 
         ws_send_prompt(ws, prompt)
         c.ok("websocket", f"prompt delivered, run-id={c.run_id}")

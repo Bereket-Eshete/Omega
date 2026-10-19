@@ -28,7 +28,7 @@ from tg_helpers import tg_send_prompt
 
 def test_memory_episode_telegram_mock(llm, tg):
     with Checker("memory episode recall (telegram mock)") as c:
-        print(f"\n=== OmegaClaw: memory episode telegram mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: memory episode telegram mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.add_cleanup_marker("Barney")
@@ -46,7 +46,7 @@ def test_memory_episode_telegram_mock(llm, tg):
         )
         llm.set_answer(
             prompt1,
-            '(remember "Barney the dog lost his first baby tooth at the vet today.")',
+            [("remember", { "content": "Barney the dog lost his first baby tooth at the vet today." })],
         )
         tg_send_prompt(tg, prompt1)
         c.ok("irc-1", f"run-id={fact_marker}")
@@ -88,7 +88,10 @@ def test_memory_episode_telegram_mock(llm, tg):
         )
         llm.set_answer(
             prompt2,
-            f'(query "Barney tooth") (send "{recall_reply}")',
+            [
+                ("query", { "content": "Barney tooth" }),
+                ("send", { "content": f"{recall_reply}" }),
+            ],
         )
         tg_send_prompt(tg, prompt2)
         c.ok("irc-2", f"run-id={recall_marker}")

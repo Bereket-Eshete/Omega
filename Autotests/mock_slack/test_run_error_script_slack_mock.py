@@ -29,7 +29,7 @@ echo "unreachable"
 
 def test_run_error_script_slack_mock(llm, sl):
     with Checker("run error script (slack mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: error script slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: error script slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -55,7 +55,7 @@ def test_run_error_script_slack_mock(llm, sl):
         )
         llm.set_answer(
             prompt,
-            f'(shell "sh {SCRIPT_FILE} > {OUTPUT_FILE} 2>&1")',
+            [("shell", { "cmd": f"sh {SCRIPT_FILE} > {OUTPUT_FILE} 2>&1" })],
         )
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")

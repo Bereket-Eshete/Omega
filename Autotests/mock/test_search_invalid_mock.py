@@ -32,7 +32,7 @@ NEGATION_PHRASES = [
 
 def test_search_invalid_mock(llm, comm):
     with Checker("search invalid (mock)") as c:
-        print(f"\n=== OmegaClaw: invalid search mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: invalid search mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("send prompt via comm channel with mocked negation response")
@@ -43,8 +43,8 @@ def test_search_invalid_mock(llm, comm):
         )
         llm.set_answer(
             prompt,
-            f'(send "No results found for {GIBBERISH}. The string appears to '
-            f'be gibberish — no meaningful matches.")',
+            [("send", { "content": f'No results found for {GIBBERISH}. The string appears to '
+            f'be gibberish — no meaningful matches.' })],
         )
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")

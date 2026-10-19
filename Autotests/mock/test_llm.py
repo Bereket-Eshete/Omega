@@ -2,6 +2,7 @@ import pytest
 
 from llm import *
 from rpc import LOCALHOST
+from providers import *
 
 TEST_ADDRESS = (LOCALHOST, 9767)
 
@@ -56,27 +57,37 @@ class TestLlmMock:
         controller.stop(5)
 
     def test_response(self, agent, controller):
-        assert controller.set_answer("hello", "world")
-        assert agent.chat(":-:-:-:['HUMAN-MSG', 'test: hello']") == "world"
+        assert controller.set_answer("hello", _llm_response_json("world"))
+        assert agent.chat(_llm_request('test: hello')) == _llm_response("world")
 
     def test_test_restart(self, agent):
         controller = LlmMockController(TEST_ADDRESS)
-        assert controller.set_answer("hello", "world")
-        assert agent.chat(":-:-:-:['HUMAN-MSG', 'test: hello']") == "world"
+        assert controller.set_answer("hello", _llm_response_json("world"))
+        assert agent.chat(_llm_request('test: hello')) == _llm_response("world")
         controller.stop(5)
         controller = LlmMockController(TEST_ADDRESS)
-        assert controller.set_answer("hello", "earth")
-        assert agent.chat(":-:-:-:['HUMAN-MSG', 'test: hello']") == "earth"
+        assert controller.set_answer("hello", _llm_response_json("earth"))
+        assert agent.chat(_llm_request('test: hello')) == _llm_response("earth")
         controller.stop(5)
 
     def test_no_message(self, agent, controller):
-        assert controller.set_answer("hello", "world")
-        assert agent.chat(":-:-:-:DO NOT RE-SEND OR SPAM!") == ""
+        assert controller.set_answer("hello", _llm_response_json("world"))
+        assert agent.chat(_llm_request("DO NOT RE-SEND OR SPAM!")) == LLMResponse()
+
+    def test_step_prefix_before_sender(self, agent, controller):
+        assert controller.set_answer("hello", _llm_response_json("world"))
+        msg = "Step 2026-09-24 15:12:23: <@U0B6ML16Q84> (OmegaClaw Driver): hello"
+        assert agent.chat(_llm_request(msg)) == _llm_response("world")
+
+    def test_step_prefix_without_sender(self, agent, controller):
+        assert controller.set_answer("hello", _llm_response_json("world"))
+        msg = "Step 2026-09-24 15:12:23: hello"
+        assert agent.chat(_llm_request(msg)) == _llm_response("world")
 
     def test_context_manager(self, agent):
         with llm_mock_controller(address=TEST_ADDRESS) as controller:
-            assert controller.set_answer("hello", "world")
-            assert agent.chat(":-:-:-:['HUMAN-MSG', 'test: hello']") == "world"
+            assert controller.set_answer("hello", _llm_response_json("world"))
+            assert agent.chat(_llm_request('test: hello')) == _llm_response("world")
 
     def test_context_manager_timeout(self, agent):
         address = (TEST_ADDRESS[0], TEST_ADDRESS[1] + 1)
@@ -193,3 +204,46 @@ class TestLlmMockContextFrames:
         prompt = prompt.replace("OUTPUT_FORMAT:", f"LAST_SKILL_USE_RESULTS: {request}_newline_OUTPUT_FORMAT:")
 
         assert agent.chat(prompt) == ""
+def _llm_request(msg):
+    return (LLMRequest().add_message(
+        LLMMessage().with_role("user").with_content(msg)))
+
+def _llm_response_json(msg):
+    return [("send", { "content": msg })]
+
+def _llm_response(msg):
+    return (LLMResponse().add_tool_call(
+        LLMToolCall().with_name("send")
+        .with_id("mockid#0")
+        .add_argument("content", msg)))
+
+
+def test_structured_frame_request_completes_and_drains():
+    import threading
+    agent = LlmMockAgent.__new__(LlmMockAgent)
+    agent._lock = threading.Lock()
+    agent._answers = {}
+    agent._served = {}
+    agent.on_set_answer({'request': 'frame task', 'response': [('send', {'content': 'done'})]})
+    request = (LLMRequest()
+               .add_message(LLMMessage().with_role('system').with_content(frame_prompt('frame task')))
+               .add_message(LLMMessage().with_role('user').with_content(SIGNAL)))
+    first = agent.chat(request)
+    assert [call.name for call in first.calls] == ['send', 'complete-goals-stm']
+    assert first.calls[0].arguments == {'content': 'done'}
+    assert [call.name for call in agent.chat(request).calls] == ['complete-goals-stm']
+    assert [call.name for call in agent.chat(request).calls] == ['complete-goals-stm']
+    assert agent.chat(request).calls == []
+
+
+def test_structured_request_does_not_answer_an_unfocused_frame():
+    import threading
+    agent = LlmMockAgent.__new__(LlmMockAgent)
+    agent._lock = threading.Lock()
+    agent._answers = {}
+    agent._served = {}
+    agent.on_set_answer({'request': 'waiting task', 'response': [('send', {'content': 'wrong'})]})
+    request = (LLMRequest()
+               .add_message(LLMMessage().with_role('system').with_content(frame_prompt('focused task')))
+               .add_message(LLMMessage().with_role('user').with_content('waiting task')))
+    assert agent.chat(request).calls == []

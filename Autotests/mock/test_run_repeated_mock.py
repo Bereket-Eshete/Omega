@@ -24,7 +24,7 @@ EXPECTED_RUNS = 10
 
 def test_run_repeated_mock(llm, comm):
     with Checker("run repeated script (mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: run 10x mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: run 10x mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -48,7 +48,7 @@ def test_run_repeated_mock(llm, comm):
             f"a row. The script appends a date line to {OUTPUT_FILE} each "
             "time it runs.",
         )
-        repeated = " ".join(f'(shell "sh {SCRIPT_FILE}")' for _ in range(EXPECTED_RUNS))
+        repeated = [("shell", { "cmd": f"sh {SCRIPT_FILE}" }) for _ in range(EXPECTED_RUNS)]
         llm.set_answer(prompt, repeated)
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")

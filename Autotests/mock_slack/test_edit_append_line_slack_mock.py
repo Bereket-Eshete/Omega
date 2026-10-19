@@ -26,7 +26,7 @@ LINE4_EXPECTED = "Delta"
 
 def test_edit_append_line_slack_mock(llm, sl):
     with Checker("edit append line (slack mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: append line slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: append line slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -52,7 +52,7 @@ def test_edit_append_line_slack_mock(llm, sl):
         )
         llm.set_answer(
             prompt,
-            f'(shell "printf \'%s\\\\n\' {LINE4_EXPECTED} >> {TARGET_FILE}")',
+            [("shell", { "cmd": f"printf '%s' {LINE4_EXPECTED} >> {TARGET_FILE}" })],
         )
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")

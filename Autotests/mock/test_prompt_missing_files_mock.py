@@ -16,16 +16,16 @@ Run:
 from helpers import Checker, dexec_root, make_prompt, wait_for_skill_call
 
 
-PROMPT_FILE = "/PeTTa/repos/OmegaClaw-Core/memory/prompt.txt"
+PROMPT_FILE = "/PeTTa/repos/Omega/memory/prompt.txt"
 PROMPT_BAK = "/tmp/prompt.txt.bak"
 
-PROMPT_PROVIDER_FILE = "/PeTTa/repos/OmegaClaw-Core/memory/prompt_Test.txt"
+PROMPT_PROVIDER_FILE = "/PeTTa/repos/Omega/memory/prompt_Test.txt"
 PROMPT_PROVIDER_BAK = "/tmp/prompt_Test.txt.bak"
 
 
 def test_missing_default_prompt_mock(llm, comm):
     with Checker("missing default prompt fallback") as c:
-        print(f"\n=== OmegaClaw: missing prompt mock (run-id {c.run_id}) ===", flush=True)
+        print(f"\n=== Omega: missing prompt mock (run-id {c.run_id}) ===", flush=True)
 
         try:
             c.step("Move prompt.txt to a temporary backup")
@@ -36,7 +36,9 @@ def test_missing_default_prompt_mock(llm, comm):
 
             c.step("Send message to agent")
             prompt = make_prompt(c.run_id, "Testing missing default prompt.")
-            llm.set_answer(prompt, f'(send "Prompt tested {c.run_id}")')
+            llm.set_answer(prompt, [
+                ("send", { "content": f"Prompt tested {c.run_id}" })
+            ])
             comm.send_message(prompt)
 
             c.step("Verify agent survived and responded")
@@ -54,7 +56,7 @@ def test_missing_default_prompt_mock(llm, comm):
 
 def test_missing_provider_prompt_mock(llm, comm):
     with Checker("missing provider prompt fallback") as c:
-        print(f"\n=== OmegaClaw: provider prompt fallback (run-id {c.run_id}) ===", flush=True)
+        print(f"\n=== Omega: provider prompt fallback (run-id {c.run_id}) ===", flush=True)
 
         try:
             c.step("Ensure provider prompt is missing (move if it exists)")
@@ -62,7 +64,7 @@ def test_missing_provider_prompt_mock(llm, comm):
             
             c.step("Send message to agent")
             prompt = make_prompt(c.run_id, "Testing fallback to default prompt.")
-            llm.set_answer(prompt, f'(send "Fallback tested {c.run_id}")')
+            llm.set_answer(prompt, [("send", { "content": f"Fallback tested {c.run_id}" })])
             comm.send_message(prompt)
 
             c.step("Verify agent successfully used fallback prompt")

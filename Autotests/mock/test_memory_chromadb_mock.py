@@ -40,7 +40,7 @@ def chromadb_vector_count():
 
 def test_memory_chromadb_mock(llm, comm):
     with Checker("chromadb vector write (mock)") as c:
-        print(f"\n=== OmegaClaw: chromadb mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: chromadb mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("count chromadb vectors before")
@@ -59,7 +59,7 @@ def test_memory_chromadb_mock(llm, comm):
         )
         llm.set_answer(
             prompt,
-            f'(remember "Unique smoke marker {marker} was emitted by CI.")',
+            [("remember", { "content": f"Unique smoke marker {marker} was emitted by CI." })]
         )
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")

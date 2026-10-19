@@ -41,7 +41,7 @@ def chromadb_vector_count():
 
 def test_memory_chromadb_telegram_mock(llm, tg):
     with Checker("chromadb vector write (telegram mock)") as c:
-        print(f"\n=== OmegaClaw: chromadb telegram mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: chromadb telegram mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("count chromadb vectors before")
@@ -60,7 +60,7 @@ def test_memory_chromadb_telegram_mock(llm, tg):
         )
         llm.set_answer(
             prompt,
-            f'(remember "Unique smoke marker {marker} was emitted by CI.")',
+            [("remember", { "content": f"Unique smoke marker {marker} was emitted by CI." })],
         )
         tg_send_prompt(tg, prompt)
         c.ok("telegram", f"run-id={c.run_id}")

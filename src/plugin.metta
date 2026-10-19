@@ -12,8 +12,7 @@
    (py-call (plugin.loadPythonPlugin $name $location)))
 
 (= (loadPlugin (metta $name $location))
-   (let True (atom-string $location $locationstr)
-       (loadMettaPlugin $name $locationstr)))
+   (loadMettaPlugin $name $location))
 
 (= (loadMettaPlugin $name $location)
    (let $rc1
@@ -23,11 +22,13 @@
            (let $path (joinPath ($location $name)) ())
            (let $space (atom-concat & (atom-concat plugin- $name)) ())
            (log INFO "plugin" (strings-concat ("Loading MeTTa plugin " $name " from " $path ".metta")))
+           ; put the plugin folder on sys.path so it can py-call into its own .py files
+           (let $addpathrc (py-call (plugin.addLocationToPath $location)) ())
              (if (== () (collapse (import! $space $path)))
                (Error (_loadMettaPlugin $name $location) (strings-concat ("Cannot import " $name " plugin from " $path)))
                (progn
-                 (let $rcs (collapse (eval (loadOmegaClawPlugin))) ())
-                 (match $space (= (loadOmegaClawPlugin) $body) (remove-atom $space (= (loadOmegaClawPlugin) $body)))
+                 (let $rcs (collapse (eval (loadOmegaPlugin))) ())
+                 (match $space (= (loadOmegaPlugin) $body) (remove-atom $space (= (loadOmegaPlugin) $body)))
                  (let $agg (|-> ($acc $next) (if (== $acc ()) (if (== Error (car-atom $next)) $next ()) ()))
                    (let $rc (foldl-atom $rcs () $agg) ()))
                  $rc))))

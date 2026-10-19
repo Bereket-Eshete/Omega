@@ -9,7 +9,8 @@ Run:
 """
 
 from helpers import (
-    Checker, find_skill_calls, make_prompt, wait_for_skill_call, wait_for_skill_match,
+    Checker, find_skill_calls, make_prompt, wait_for_skill_call,
+    wait_for_skill_match,
 )
 from slack_helpers import sl_send_prompt
 
@@ -18,7 +19,7 @@ STEP_KEYWORDS = ("step", "alpha", "beta", "gamma", "restart", "server", "done")
 
 def test_skill_pin_slack_mock(llm, sl):
     with Checker("pin skill invocation (slack mock)") as c:
-        print(f"\n=== OmegaClaw: pin slack mock (run-id {c.run_id}) ===", flush=True)
+        print(f"\n=== Omega: pin slack mock (run-id {c.run_id}) ===", flush=True)
 
         c.step("send prompt with mocked pin + send response")
         prompt = make_prompt(
@@ -30,8 +31,10 @@ def test_skill_pin_slack_mock(llm, sl):
         )
         llm.set_answer(
             prompt,
-            '(pin "Server restart progress: alpha done; beta and gamma pending.") '
-            '(send "Tracking: alpha done, beta and gamma pending.")',
+            [
+                ("pin", { "message": "Server restart progress: alpha done; beta and gamma pending." }),
+                ("send", { "content": "Tracking: alpha done, beta and gamma pending." })
+            ]
         )
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")

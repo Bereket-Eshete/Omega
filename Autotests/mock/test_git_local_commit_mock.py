@@ -36,7 +36,7 @@ def test_git_local_commit_mock(llm, comm):
         c.ok("git setup")
 
         start_ts = int(time.time()) - 1
-        marker = f"omegaclaw run {c.run_id}"
+        marker = f"omega run {c.run_id}"
         c.add_cleanup_marker(marker)
 
         c.step("send prompt via comm channel with mocked response")
@@ -53,11 +53,12 @@ def test_git_local_commit_mock(llm, comm):
         # needs the message in single-quoted shell string while the s-exp
         # arg itself is double-quoted, so we escape inner quotes.
         llm.set_answer(
-            prompt,
-            f'(shell "git -C {TARGET_DIR} init") '
-            f'(write-file "{commit_path}" "{marker}") '
-            f'(shell "git -C {TARGET_DIR} add -A") '
-            f'(shell "git -C {TARGET_DIR} commit -m \\"add hello {c.run_id}\\"")',
+            prompt, [
+                ("shell", { "cmd": f"git -C {TARGET_DIR} init" }),
+                ("write-file", { "filename": f"{commit_path}", "content": f"{marker}" }),
+                ("shell", { "cmd": f"git -C {TARGET_DIR} add -A" }),
+                ("shell", { "cmd": f'git -C {TARGET_DIR} commit -m "add hello {c.run_id}"' })
+            ]
         )
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")

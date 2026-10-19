@@ -36,7 +36,7 @@ def test_git_local_commit_telegram_mock(llm, tg):
         c.ok("git setup")
 
         start_ts = int(time.time()) - 1
-        marker = f"omegaclaw run {c.run_id}"
+        marker = f"omega run {c.run_id}"
         c.add_cleanup_marker(marker)
 
         c.step("send prompt via Telegram with mocked response")
@@ -54,10 +54,12 @@ def test_git_local_commit_telegram_mock(llm, tg):
         # arg itself is double-quoted, so we escape inner quotes.
         llm.set_answer(
             prompt,
-            f'(shell "git -C {TARGET_DIR} init") '
-            f'(write-file "{commit_path}" "{marker}") '
-            f'(shell "git -C {TARGET_DIR} add -A") '
-            f'(shell "git -C {TARGET_DIR} commit -m \\"add hello {c.run_id}\\"")',
+            [
+                ("shell", { "cmd": f"git -C {TARGET_DIR} init" }),
+                ("write-file", { "filename": f"{commit_path}", "content": f"{marker}" }),
+                ("shell", { "cmd": f"git -C {TARGET_DIR} add -A" }),
+                ("shell", { "cmd": f"git -C {TARGET_DIR} commit -m \"add hello {c.run_id}\"" }),
+            ],
         )
         tg_send_prompt(tg, prompt)
         c.ok("telegram", f"run-id={c.run_id}")

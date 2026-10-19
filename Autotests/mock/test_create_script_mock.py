@@ -32,7 +32,7 @@ def _current_year_strs():
 
 def test_create_date_script_mock(llm, comm):
     with Checker("create date.sh (mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: create date.sh mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: create date.sh mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -47,10 +47,11 @@ def test_create_date_script_mock(llm, comm):
             "Create the directory if needed.",
         )
         llm.set_answer(
-            prompt,
-            f'(shell "mkdir -p {TARGET_DIR}") '
-            f'(write-file "{TARGET_FILE}" "#!/bin/bash\\ndate\\n") '
-            f'(shell "chmod +x {TARGET_FILE}")',
+            prompt, [
+                ("shell", { "cmd": f"mkdir -p {TARGET_DIR}" }),
+                ("write-file", { "filename": f"{TARGET_FILE}", "content": "#!/bin/bash\ndate\n" }),
+                ("shell", { "cmd": f"chmod +x {TARGET_FILE}" }),
+            ]
         )
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")

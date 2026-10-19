@@ -24,7 +24,7 @@ INITIAL_CONTENT = "This is a test note.\n"
 
 def test_edit_add_timestamp_telegram_mock(llm, tg):
     with Checker("edit add timestamp (telegram mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: add timestamp telegram mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: add timestamp telegram mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -53,7 +53,7 @@ def test_edit_add_timestamp_telegram_mock(llm, tg):
         # real test.
         llm.set_answer(
             prompt,
-            f'(shell "date -Iseconds >> {TARGET_FILE}")',
+            [("shell", { "cmd": f"date -Iseconds >> {TARGET_FILE}" })],
         )
         tg_send_prompt(tg, prompt)
         c.ok("telegram", f"run-id={c.run_id}")

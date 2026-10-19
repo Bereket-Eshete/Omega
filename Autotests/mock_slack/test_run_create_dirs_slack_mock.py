@@ -26,7 +26,7 @@ EXPECTED_DIRS = ["test1", "test2", "test3"]
 
 def test_run_create_dirs_slack_mock(llm, sl):
     with Checker("create dirs script (slack mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: create dirs slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: create dirs slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -47,9 +47,11 @@ def test_run_create_dirs_slack_mock(llm, sl):
         mkdir_args = " ".join(f"{TARGET_DIR}/{d}" for d in EXPECTED_DIRS)
         llm.set_answer(
             prompt,
-            f'(write-file "{SCRIPT_PATH}" "#!/bin/bash\\nmkdir -p {mkdir_args}\\n") '
-            f'(shell "chmod +x {SCRIPT_PATH}") '
-            f'(shell "sh {SCRIPT_PATH}")',
+            [
+                ("write-file", { "filename": f"{SCRIPT_PATH}", "content": f"#!/bin/bash\nmkdir -p {mkdir_args}\n" }),
+                ("shell", { "cmd": f"chmod +x {SCRIPT_PATH}" }),
+                ("shell", { "cmd": f"sh {SCRIPT_PATH}" }),
+            ],
         )
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")

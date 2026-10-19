@@ -33,7 +33,7 @@ def _current_year_strs():
 
 def test_create_date_script_telegram_mock(llm, tg):
     with Checker("create date.sh (telegram mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: create date.sh telegram mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: create date.sh telegram mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -49,9 +49,11 @@ def test_create_date_script_telegram_mock(llm, tg):
         )
         llm.set_answer(
             prompt,
-            f'(shell "mkdir -p {TARGET_DIR}") '
-            f'(write-file "{TARGET_FILE}" "#!/bin/bash\\ndate\\n") '
-            f'(shell "chmod +x {TARGET_FILE}")',
+            [
+                ("shell", { "cmd": f"mkdir -p {TARGET_DIR}" }),
+                ("write-file", { "filename": f"{TARGET_FILE}", "content": "#!/bin/bash\ndate\n" }),
+                ("shell", { "cmd": f"chmod +x {TARGET_FILE}" }),
+            ],
         )
         tg_send_prompt(tg, prompt)
         c.ok("telegram", f"run-id={c.run_id}")

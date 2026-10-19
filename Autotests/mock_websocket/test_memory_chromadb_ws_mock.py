@@ -37,7 +37,7 @@ def chromadb_vector_count():
 
 def test_memory_chromadb_ws_mock(llm, ws):
     with Checker("chromadb vector write (ws mock)") as c:
-        print(f"\n=== OmegaClaw: chromadb ws mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: chromadb ws mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("wait for agent WebSocket connection")
@@ -61,7 +61,7 @@ def test_memory_chromadb_ws_mock(llm, ws):
         )
         llm.set_answer(
             prompt,
-            f'(remember "Unique smoke marker {marker} was emitted by CI.")',
+            [("remember", { "content": f"Unique smoke marker {marker} was emitted by CI." })],
         )
         ws_send_prompt(ws, prompt)
         c.ok("websocket", f"run-id={c.run_id}")

@@ -26,7 +26,7 @@ EXPECTED_DIRS = ["test1", "test2", "test3"]
 
 def test_run_create_dirs_telegram_mock(llm, tg):
     with Checker("create dirs script (telegram mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: create dirs telegram mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: create dirs telegram mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -47,9 +47,11 @@ def test_run_create_dirs_telegram_mock(llm, tg):
         mkdir_args = " ".join(f"{TARGET_DIR}/{d}" for d in EXPECTED_DIRS)
         llm.set_answer(
             prompt,
-            f'(write-file "{SCRIPT_PATH}" "#!/bin/bash\\nmkdir -p {mkdir_args}\\n") '
-            f'(shell "chmod +x {SCRIPT_PATH}") '
-            f'(shell "sh {SCRIPT_PATH}")',
+            [
+                ("write-file", { "filename": f"{SCRIPT_PATH}", "content": f"#!/bin/bash\nmkdir -p {mkdir_args}\n" }),
+                ("shell", { "cmd": f"chmod +x {SCRIPT_PATH}" }),
+                ("shell", { "cmd": f"sh {SCRIPT_PATH}" }),
+            ],
         )
         tg_send_prompt(tg, prompt)
         c.ok("telegram", f"run-id={c.run_id}")

@@ -1,5 +1,5 @@
 """
-Test: OmegaClaw creates hello.txt with content "Hello" in /tmp/testcat.
+Test: Omega creates hello.txt with content "Hello" in /tmp/testcat.
 
 Run:
     pytest test_create_file.py -s
@@ -19,7 +19,7 @@ WAIT = 30
 
 def test_hello_file_slack_mock(llm, sl):
     with Checker("create hello.txt", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw smoke test (run-id {c.run_id}) ===", flush=True)
+        print(f"\n=== Omega smoke test (run-id {c.run_id}) ===", flush=True)
 
         c.verify_clean()
 
@@ -31,7 +31,10 @@ def test_hello_file_slack_mock(llm, sl):
             f"Please overwrite {TARGET_FILE} so it contains exactly the single "
             "word Hello (no quotes, no extra newlines, create the directory if needed).",
         )
-        llm.set_answer(prompt, f'(shell "mkdir -p /tmp/testcat") (write-file "/tmp/testcat/hello.txt" "Hello")')
+        llm.set_answer(prompt, [
+            ("shell", { "cmd": "mkdir -p /tmp/testcat" }),
+            ("write-file", { "filename": "/tmp/testcat/hello.txt", "content": "Hello" }),
+        ])
 
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"prompt delivered, run-id={c.run_id}")

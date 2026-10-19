@@ -25,7 +25,7 @@ LINE4_EXPECTED = "Delta"
 
 def test_edit_append_line_mock(llm, comm):
     with Checker("edit append line (mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: append line mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: append line mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -51,7 +51,7 @@ def test_edit_append_line_mock(llm, comm):
         )
         llm.set_answer(
             prompt,
-            f'(shell "printf \'%s\\\\n\' {LINE4_EXPECTED} >> {TARGET_FILE}")',
+            [("shell", { "cmd": f"printf \'%s\' {LINE4_EXPECTED} >> {TARGET_FILE}" })]
         )
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")

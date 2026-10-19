@@ -398,10 +398,22 @@ def _parse_relation_classes(relation_classes_repr: str) -> list[str]:
 def _call_selected_llm(content: str, max_tokens: int, reasoning_mode: str) -> str:
     import providers
 
-    chat = getattr(providers, "llmProviderChat", None)
-    if chat is None:
-        raise RuntimeError("OmegaClaw LLM provider registry is not loaded")
-    return str(chat(content, max_tokens, reasoning_mode) or "")
+    # Classification is an internal result, not a user-facing send operation.
+    tools = providers.getTools([
+        ("frame_relations", "Return the relation classification as JSON", ["json"]),
+    ])
+    request = providers.llmRequest(
+        providers.llmRequestMessage("system", "Classify frame relations and return JSON using frame_relations."),
+        [providers.llmRequestMessage("user", content)],
+        max_tokens, reasoning_mode, tools,
+    )
+    response = providers.llmProviderChat(request)
+    if response.is_error():
+        raise RuntimeError(f"Frame relation classification failed: {response.error}")
+    for call in response.calls:
+        if call.name == "frame_relations" and not call.is_error():
+            return str(call.arguments["json"])
+    raise RuntimeError("Frame relation classifier did not return a valid frame_relations call")
 
 
 def _call_classifier_llm(payload: dict[str, Any]) -> dict[str, Any]:
@@ -438,7 +450,7 @@ Rules:
     user_text = json.dumps(payload, ensure_ascii=False)
     content = (
         f"{system_prompt}"
-        f"{lib_llm_ext.PROMPT_DELIMITER}"
+        "\n\n"
         f"{user_text}"
     )
     max_tokens = max(

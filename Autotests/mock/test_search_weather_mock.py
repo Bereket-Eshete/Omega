@@ -22,7 +22,7 @@ REF_TEMP_C = 18.0
 
 def test_search_weather_mock(llm, comm):
     with Checker("search weather valencia (mock)") as c:
-        print(f"\n=== OmegaClaw: Valencia weather mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: Valencia weather mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("send prompt via comm channel with mocked send response")
@@ -34,7 +34,7 @@ def test_search_weather_mock(llm, comm):
         mocked_reply = (
             f"Current weather in Valencia, Spain: about {REF_TEMP_C:.1f}°C."
         )
-        llm.set_answer(prompt, f'(send "{mocked_reply}")')
+        llm.set_answer(prompt, [("send", { "content": f"{mocked_reply}" })])
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")
         c.ok("comm", f"run-id={c.run_id}")

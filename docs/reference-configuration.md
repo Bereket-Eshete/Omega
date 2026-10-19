@@ -1,14 +1,14 @@
 # Reference — Configuration
 
-Every tunable in OmegaClaw is declared as `(= (name) (empty))` and later bound by a `configure` call inside an `init*` function. The `configure` helper in `src/utils.metta` is:
+Every tunable in Omega is declared as `(= (name) (empty))` and later bound by a `configure` call inside an `init*` function. The `configure` helper in `src/config.metta` is:
 
 ```metta
 (= (configure $name $default)
-   (let $value (argk $name $default)
+   (let $value (configGetByKey $name $default)
         (add-atom &self (= ($name) $value))))
 ```
 
-This reads a command-line override via `argk` (`name=value` on the MeTTa command line) if present, otherwise falls back to the default.
+This resolves the value through the Python configuration layer, using command-line overrides, environment variables, YAML configuration, and the caller's default in that order.
 
 ## Loop (`src/loop.metta`, `initLoop`)
 
@@ -27,24 +27,29 @@ This reads a command-line override via `argk` (`name=value` on the MeTTa command
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `maxFeedback` | 50000 (chars) | Ceiling on `LAST_SKILL_USE_RESULTS` text fed back into the prompt. |
+| `maxFeedback` | 50000 (chars) | Ceiling on a single tool call result text fed back into the prompt. |
 | `maxRecallItems` | 20 | Items returned by `query`. |
 | `maxEpisodeRecallLines` | 20 | Lines returned by `episodes`. |
 | `maxHistory` | 30000 (chars) | Tail of `memory/history.metta` included in the prompt. |
-| `embeddingprovider` | `Local` | `Local` (Python-side model) or `OpenAI`. |
+| `memoryDirectory` | `./repos/Omega/memory` | Directory containing persistent memory files such as `history.metta`. |
+| `chromaDbPath` | `./chroma_db` | ChromaDB persistence directory used for memory backup and restore. |
+| `embeddingprovider` | `Local` | `Local` (Python-side model), or the id of a provider that serves an OpenAI-compatible `/embeddings` endpoint — `OpenAI` and `ASICloud` are known to. The gateway supplies that provider's key. |
+| `embeddingModel` | empty | Model asked of a non-`Local` `embeddingprovider`. Empty means the provider default: `text-embedding-3-large` for `OpenAI`, `WhereIsAI/UAE-Large-V1` for `ASICloud`. |
+| `embeddingBatchSize` | `32` | Positive integer: maximum texts per cloud embedding request during runtime knowledge loading. Lower it for providers with smaller request limits. The default keeps valid OpenAI inputs below the 300,000-token request limit (32 × 8192 = 262,144 tokens). Larger values must fit the provider's input-count and total-token limits. This does not split or truncate individual texts that exceed the model's context limit. |
 
 ## Channels (`src/channels.metta`, `initChannels`)
 
 | Parameter | Default | Meaning |
 |---|---|---|
 | `commchannel` | `irc` | Active channel — `irc`, `telegram`, `slack`, `mattermost`, or `websocket`. |
-| `IRC_channel` | `##omegaclaw` | IRC channel to join. |
+| `IRC_channel` | `##omega` | IRC channel to join. |
 | `IRC_server` | `irc.quakenet.org` | IRC server hostname. |
 | `IRC_port` | 6667 | IRC port. |
-| `IRC_user` | `omegaclaw` | IRC nickname. |
-| `TG_CHAT_ID` | *(empty — auto-bind supported)* | Optional fixed Telegram chat ID. Leave empty to auto-bind on first valid inbound auth/message. |
+| `IRC_user` | `omega` | IRC nickname. |
+| `TG_CHAT_ID` | *(empty)* | Legacy single-chat bootstrap/fallback, primarily for authentication-disabled deployments. With authentication enabled, the authenticated owner's DM becomes the proactive-message default. |
+| `TG_ALLOWED_CHAT_IDS` | *(empty)* | Optional comma-separated initial allowed-chat set. The authenticated owner can add groups with `/bind` and remove them with `/unbind`; those changes are persisted in `memory/.channel/authenticated-group.json`, not written back to YAML. |
 | `TG_POLL_TIMEOUT` | 20 | Telegram long-poll timeout in seconds. |
-| `SL_CHANNEL_ID` | *(empty — auto-bind supported)* | Optional Slack channel ID where OmegaClaw reads/writes messages. Leave empty to auto-bind on first valid inbound auth/message. |
+| `SL_CHANNEL_ID` | *(empty — auto-bind supported)* | Optional Slack channel ID where Omega reads/writes messages. Leave empty to auto-bind on first valid inbound auth/message. |
 | `SL_POLL_INTERVAL` | 60 | Slack poll interval in seconds (minimum effective value is 60). |
 | `MM_URL` | `https://chat.singularitynet.io` | Mattermost base URL. |
 | `MM_CHANNEL_ID` | `8fjrmabjx7gupy7e5kjznpt5qh` | Target channel ID. |
@@ -54,6 +59,7 @@ This reads a command-line override via `argk` (`name=value` on the MeTTa command
 | Environment variable | Meaning |
 |---|---|
 | `TG_BOT_TOKEN` | Telegram bot token (from BotFather). |
+| `OMEGA_AUTH_SECRET` | Enables the one-time owner-authentication handshake when non-empty. The owner sends `auth <secret>` in a private Telegram DM. |
 | `MM_BOT_TOKEN` | Bot auth token. |
 | `SL_BOT_TOKEN` | Slack bot token (`xoxb-...`). |
 
@@ -63,6 +69,28 @@ Any `configure`d parameter can be overridden at startup:
 
 ```bash
 metta run.metta provider=Anthropic LLM=claude-opus-4-6 commchannel=mattermost
+```
+
+Configuration values are resolved in this order: command-line `key=value`,
+`OMEGA_<KEY>` environment variable, `config/config.yaml`, then the caller's
+default. `TG_BOT_TOKEN` and `OMEGA_AUTH_SECRET` are read directly from the
+environment and must be placed before the `metta`/`petta` command.
+
+For numeric settings, unambiguous integer and floating-point command-line values
+are parsed as numbers: `maxFeedback=25000` and `sleepInterval=0.5` can be used in
+arithmetic. The caller's default determines the setting's type; when no default is
+provided, the YAML value is used. String settings and settings without a known
+type keep their CLI text unchanged, including `IRC_channel=123`,
+`IRC_channel=001`, and `OPENROUTER_SESSION_ID=123`.
+A bare argument remains a boolean flag, but a numeric setting requires
+`key=<number>`. For example,
+`maxFeedback` without a value raises an error naming the parameter when resolved.
+
+Telegram example:
+
+```bash
+TG_BOT_TOKEN=... OMEGA_AUTH_SECRET=... \
+  metta run.metta commchannel=telegram
 ```
 
 Slack example:

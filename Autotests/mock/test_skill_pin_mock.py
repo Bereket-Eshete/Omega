@@ -18,7 +18,7 @@ STEP_KEYWORDS = ("step", "alpha", "beta", "gamma", "restart", "server", "done")
 
 def test_skill_pin_mock(llm, comm):
     with Checker("pin skill invocation (mock)") as c:
-        print(f"\n=== OmegaClaw: pin mock (run-id {c.run_id}) ===", flush=True)
+        print(f"\n=== Omega: pin mock (run-id {c.run_id}) ===", flush=True)
 
         c.step("send prompt with mocked pin + send response")
         prompt = make_prompt(
@@ -30,8 +30,8 @@ def test_skill_pin_mock(llm, comm):
         )
         llm.set_answer(
             prompt,
-            '(pin "Server restart progress: alpha done; beta and gamma pending.") '
-            '(send "Tracking: alpha done, beta and gamma pending.")',
+            [("pin", { "message": "Server restart progress: alpha done; beta and gamma pending." }),
+             ("send", { "content": "Tracking: alpha done, beta and gamma pending." })]
         )
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")

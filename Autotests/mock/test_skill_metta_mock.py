@@ -19,7 +19,7 @@ from helpers import (
 
 def test_skill_metta_mock(llm, comm):
     with Checker("metta skill invocation (mock)") as c:
-        print(f"\n=== OmegaClaw: metta mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: metta mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("send prompt via comm channel with mocked metta + send response")
@@ -34,7 +34,8 @@ def test_skill_metta_mock(llm, comm):
         # concrete number is communicated back.
         llm.set_answer(
             prompt,
-            '(metta "(+ 2 2)") (send "The metta skill evaluated (+ 2 2) and returned 4.")',
+            [("metta", { "sexpression": "(+ 2 2)" }),
+             ("send", { "content": "The metta skill evaluated (+ 2 2) and returned 4." })],
         )
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")

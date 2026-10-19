@@ -24,7 +24,7 @@ KEY_PHRASES = ["My Title", "Some paragraph text", "item one", "item two"]
 
 def test_convert_md_to_txt_mock(llm, comm):
     with Checker("convert .md to .txt (mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: convert format mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: convert format mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -50,7 +50,7 @@ def test_convert_md_to_txt_mock(llm, comm):
         )
         llm.set_answer(
             prompt,
-            f'(shell "cp {SOURCE_FILE} {DEST_FILE}")',
+            [("shell", {"cmd": f"cp {SOURCE_FILE} {DEST_FILE}"})]
         )
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")

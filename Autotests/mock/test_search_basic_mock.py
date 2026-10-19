@@ -29,7 +29,7 @@ SINGULARITYNET_DESCRIPTION = (
 
 def test_search_basic_mock(llm, comm):
     with Checker("search singularitynet (mock)") as c:
-        print(f"\n=== OmegaClaw: basic search mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: basic search mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("send prompt via comm channel with mocked send response")
@@ -37,7 +37,7 @@ def test_search_basic_mock(llm, comm):
             c.run_id,
             "What is SingularityNet? Search the web and give me a short description.",
         )
-        llm.set_answer(prompt, f'(send "{SINGULARITYNET_DESCRIPTION}")')
+        llm.set_answer(prompt, [("send", { "content": f"{SINGULARITYNET_DESCRIPTION}" })])
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")
         c.ok("comm", f"run-id={c.run_id}")

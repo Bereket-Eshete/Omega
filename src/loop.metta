@@ -8,61 +8,79 @@
 (= (memoryDirectory) (empty))
 
 (= (initLoop)
-   (progn (configure maxNewInputLoops 50)
+   (progn (configure maxNewInputLoops 50) ;20
           (configure maxWakeLoops 1)
           (configure sleepInterval 1) ;10
           (configure provider Anthropic)
           (configure maxOutputToken 6000)
           (configure reasoningMode medium)
           (configure wakeupInterval 600) ;600=10 minutes
-          (configure memoryDirectory ./)
+          (configure memoryDirectory
+               (joinPath ((py-call (helper.projectRootDirectory)) memory)))
           (change-state! &prevmsg "")
           (change-state! &lastresults "")
           (change-state! &loops (maxNewInputLoops))
+          (messagesClear)
           ))
 
 (= (initKnowledge)
    (progn (log INFO "loop" "Initializing knowledge base")
-          (if (== (embeddingprovider) OpenAI)
-               (log INFO "loop" (py-call (rag.init_knowledge "OpenAI")))
-               (log INFO "loop" (py-call (rag.init_knowledge "Local"))))))
+          (log INFO "loop" (py-call (rag.init_knowledge (embeddingprovider))))
+          ()))
 
-(= (getContext) 
+(= (getContext)
    (string-safe (py-str ("PROMPT: " (getPrompt (provider)) (newline)
                          "RUNTIME-PROMPT: " (getContextFramePrompt) (newline)
                          "CURRENT_CONTEXT_FRAME_S_EXPR: " (contextFrameForPrompt) (newline)
-                         "SKILLS: " (getSkills) (newline)
+                         "SKILLS: " (getSkillRules) (newline)
                          "CONTEXT_FRAME_SKILLS: " (contextFramesSkills) (newline)
                          (getPromptExtensions) (newline)
-                         "OUTPUT_FORMAT: Up to 5 lines, do not wrap quotes around args, do not use variables:" (newline)
-                         "toolName1 arg1" (newline)
-                         "toolName2 arg2" (newline)
-                         "toolName3 arg3" (newline)
-                         "toolName4 arg4" (newline)
-                         "toolName5 arg5" (newline)
                          "SAVE_PERMANENT_FILES_DIR: " (memoryDirectory) (newline)
                          "LAST_SKILL_USE_RESULTS: you must rectify ALERT_FAILED skill use cases "
                             (last_chars (get-state &lastresults) (maxFeedback)) (newline)
                          "TIME: " (get_time_as_string)))))
 
+(= (addTelegramPromptExtension)
+   (if (== (commchannel) telegram)
+       (let $path (joinPath ((memoryDirectory) "tg_prompt.txt"))
+            (if (exists-file $path)
+                (add-prompt-extension tg-prompt (read-file $path))
+                (progn (log WARN "loop" (TELEGRAM_PROMPT_NOT_FOUND: $path))
+                       ())))
+       ()))
+
 (= (getPromptExtensions)
    (join (newline) (collapse (prompt-extension $_))))
 
-; Dynamic prompt extension placeholder to eliminate errors when no extension is added.
+; dynamic prompt extension placeholder to eliminate error when no extension is added
 (= (prompt-extension placeholder) (empty))
 
-(= (HandleError $msg $cmd $sexpr)
-   (case $sexpr (((Error $a $b) (let $new (append (get-state &error) (($msg $cmd)))
-                                          (progn (change-state! &error $new) (ALERT_FAILED $a $b))))
-                 ($else $sexpr))))
+(= (HandleError $result $error)
+   (case $result (
+      ((Error $cmd $msg) (let $new (append (get-state &error) (($msg $cmd)))
+                           (let $errorstr (swrite $result)
+                             (progn
+                               (change-state! &error $new)
+                               (let $error (strings-concat ("ALERT_FAILED" $errorstr))
+                                 True)))))
+      ($else False))))
 
-(= (metta $str)
-   (let $code (sread $str)
-        (repr (swrite (eval $code)))))
+(= (collectTools)
+   (py-call (providers.getTools (getSkills))))
 
-(= (omegaclaw)
-   (omegaclaw 1))
-(= (omegaclaw $k)
+(= (messagesGet)
+   (get-state &messages_all))
+
+(= (messagesClear)
+   (change-state! &messages_all (py-call (utils.listNew))))
+
+(= (messagesAppend $item)
+   (let $episodic (get-state &messages_all)
+     (change-state! &messages_all (py-call (utils.listAppend $episodic $item)))))
+
+(= (omega)
+   (omega 1))
+(= (omega $k)
    (progn (if (== $k 1) (progn (initConfig)
                                (initLoop)
                                (initLogger)
@@ -72,6 +90,8 @@
                                (initPlugins)
                                (initChannels)
                                (initContextFrame)
+                               (addTelegramPromptExtension)
+                               (commChannelSend (version))
                                (llmProviderStart (provider)))
           (change-state! &loops (- (get-state &loops) 1)))
 
@@ -97,28 +117,45 @@
                                "NEW_INPUT_HAS_BEEN_ADMITTED_AS_ACTIVE_FRAME. Continue current frame or switch-frame to a higher-priority admitted frame if appropriate."
                                "NEW_INPUT_HAS_BEEN_ADMITTED_AS_ACTIVE_FRAME.")
                            (if (cfv2-has-current-frame)
-                               "NO_NEW_INPUT. Continue only if the context frame contains an active useful goal or select relevant frame from the active space."
-                               "NO_NEW_INPUT. No active frame. Consider switching your mode to pursue frames registered with mode = Slow or create a new autonomous goal.")))
+                               "NO NEW USER INPUT. Continue only if the context frame contains an active useful goal or select relevant frame from the active space."
+                               "NO NEW USER INPUT. No active frame. Consider switching your mode to pursue frames registered with mode = Slow or create a new autonomous goal.")))
                     ($_ (change-state! &nextWakeAt (+ (get_time) (wakeupInterval))))
                     ($_ (log INFO "loop" $loopSignal))
-                    ($send (py-str ($prompt :-:-:-: $loopSignal)))
-                    ($_ (log INFO "loop" (CHARS_SENT: (string_length $send) $send)))
-                    ($respi (llmProviderChat $send (maxOutputToken) (reasoningMode)))
-                    ($resp (py-call (helper.balance_parentheses $respi)))
-                    ($response (if (== "(" (first_char $resp)) $resp (progn (log INFO "loop" $resp) (repr (REMEMBER:OUTPUT_NOTHING_ELSE_THAN: ((skill arg) ...))))))
-                    ($sexpr (catch (sread $response)))
+                    ($system (llmRequestMessage role "system" content $prompt))
+                    ($_ (messagesAppend (llmRequestMessage role "user" content $loopSignal)))
+                    ($request (llmRequest $system (messagesGet) (maxOutputToken) (reasoningMode) (collectTools)))
+                    ($_ (log INFO "loop" (REQUEST: (py-str ($request)))))
                     ($commandFrameID (get-state &cfv2-current-frame-id))
+                    ($response (llmProviderChat $request))
+                    ($_ (log INFO "loop" (RESPONSE: (py-str ($response)))))
+                    ($respstr (py-call (providers.llmResponseToSExpr $response)))
+                    ($resp (catch (sread $respstr)))
+                    ($_ (log INFO "loop" (RESPONSE: $resp)))
                     ($_ (change-state! &error ()))
-                    ($mcerr (HandleError MULTI_COMMAND_FAILURE_NOTHING_WAS_DONE_PLEASE_CORRECT_PARENTHESES_AND_USE_QUOTES_AND_RETRY $response $sexpr))
-                    ($_ (log INFO "loop" (RESPONSE: $sexpr)))
-                    ($results (if (== $mcerr $sexpr)
-                                  (RESULTS: (collapse (let $s (superpose $sexpr) (COMMAND_RETURN: ($s (HandleError SINGLE_COMMAND_ERROR_NOTHING_WAS_DONE_PLEASE_FIX_AND_RETRY $s (catch (let $R (eval $s) (py-call (helper.normalize_string $R))))))))))
-                                  (RESULTS: $mcerr)))
-                    ($_ (log INFO "loop" (RESPONSE: $results))))
-                  (progn (if (or $msgnew (not (== $sexpr ()))) (addToHistory $msg $response $sexpr $msgnew) _)
-                         (ctx-record-command-batch-for-frame $commandFrameID $sexpr $results)
-                         (ctx-maintain-frame)
-                         (change-state! &lastresults (string-safe (repr $results)))))
+                    ($_ (messagesClear))
+                    ($_ (change-state! &frame-batch-results ()))
+                    ($sexpr (if (HandleError (quote $resp) $error)
+                              $error
+                              (progn (messagesAppend (llmToolCallMessage role "assistant"
+                                                                        calls (llmResponseCalls $response)
+                                                                        content "[TOOL CALL]"))
+                                (collapse
+                                      (let ($callid $s) (superpose $resp)
+                                        (let $result
+                                          (if (HandleError (quote $s) $error) $error
+                                            (let $rc (catch (let $R (collapse (eval $s)) (py-call (helper.normalize_string $R))))
+                                              (if (HandleError $rc $error) $error (strings-concat ("SUCCESS, RETURN: " $rc)))))
+                                          (progn
+                                            ($_ (log INFO "loop" (COMMAND_RETURN: ((quote $s) $result))))
+                                            (messagesAppend (llmToolCallResponseMessage role "tool" callid $callid content (last_chars $result (maxFeedback))))
+                                            (change-state! &frame-batch-results
+                                              (append (get-state &frame-batch-results) ((COMMAND_RETURN (quote $s) $result))))
+                                            (quote $s)))))))))
+                        (progn
+                          (if (or $msgnew (not (== $sexpr ()))) (addToHistory $msg $sexpr $msgnew) _)
+                          (ctx-record-command-batch-for-frame $commandFrameID $sexpr (get-state &frame-batch-results))
+                          (ctx-maintain-frame)
+                          (change-state! &lastresults (string-safe (repr (get-state &frame-batch-results))))))
              (if (> (get_time) (get-state &nextWakeAt))
                  (change-state! &loops (+ 1 (maxWakeLoops)))
                  (if (== (get-state &cfv2-root-mode) Fast) (switch-mode) _))))
@@ -126,4 +163,8 @@
       (sleep (sleepInterval))
                       (cut)
                       (gc)
-                      (omegaclaw (+ 1 $k))))
+                      (omega (+ 1 $k))))
+
+; Legacy entry points.
+(= (omegaclaw) (omega))
+(= (omegaclaw $k) (omega $k))

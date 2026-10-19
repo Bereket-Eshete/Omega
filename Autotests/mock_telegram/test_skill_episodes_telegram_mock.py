@@ -25,7 +25,7 @@ from tg_helpers import tg_send_prompt
 
 def test_skill_episodes_telegram_mock(llm, tg):
     with Checker("episodes skill recall (telegram mock)") as c:
-        print(f"\n=== OmegaClaw: episodes telegram mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: episodes telegram mock (run-id {c.run_id}) ===",
               flush=True)
 
         marker = f"BEACON-{c.run_id}"
@@ -41,7 +41,7 @@ def test_skill_episodes_telegram_mock(llm, tg):
             f"the keyword {marker} from me. No need to remember it — just "
             f"reply once.",
         )
-        llm.set_answer(seed_prompt, f'(send "Acknowledged keyword {marker}.")')
+        llm.set_answer(seed_prompt, [("send", { "content": f"Acknowledged keyword {marker}." })])
         tg_send_prompt(tg, seed_prompt)
         c.ok("irc-seed", f"run-id={seed_id}, time={seed_time:%H:%M:%S}")
 
@@ -69,7 +69,10 @@ def test_skill_episodes_telegram_mock(llm, tg):
         )
         llm.set_answer(
             recall_prompt,
-            f'(episodes "{time_str}") (send "The unique keyword was {marker}.")',
+            [
+                ("episodes", { "timestamp": f"{time_str}" }),
+                ("send", { "content": f"The unique keyword was {marker}." }),
+            ],
         )
         tg_send_prompt(tg, recall_prompt)
         c.ok("irc-recall", f"run-id={recall_id}")

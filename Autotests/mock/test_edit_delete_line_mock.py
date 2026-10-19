@@ -23,7 +23,7 @@ LINE3 = "Third line"
 
 def test_edit_delete_line_mock(llm, comm):
     with Checker("edit delete line (mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: delete second line mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: delete second line mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -51,7 +51,7 @@ def test_edit_delete_line_mock(llm, comm):
         )
         llm.set_answer(
             prompt,
-            f'(shell "sed -i 2d {TARGET_FILE}")',
+            [("shell", { "cmd": f"sed -i 2d {TARGET_FILE}" })]
         )
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")

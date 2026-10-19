@@ -16,14 +16,15 @@ import time
 
 
 from helpers import (
-    Checker, find_skill_calls, make_prompt, wait_for_skill_call, wait_for_skill_match,
+    Checker, find_skill_calls, make_prompt, wait_for_skill_call,
+    wait_for_skill_match,
 )
 from slack_helpers import sl_send_prompt
 
 
 def test_skill_query_slack_mock(llm, sl):
     with Checker("query skill recall (slack mock)") as c:
-        print(f"\n=== OmegaClaw: query slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: query slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         secret_color = f"azure-{c.run_id}"
@@ -41,8 +42,10 @@ def test_skill_query_slack_mock(llm, sl):
         )
         llm.set_answer(
             seed_prompt,
-            f'(remember "My favorite color is {secret_color}.") '
-            f'(send "Stored: favorite colour is {secret_color}.")',
+            [
+                ("remember", { "content": f"My favorite color is {secret_color}." }),
+                ("send", { "content": f"Stored: favorite colour is {secret_color}." }),
+            ]
         )
         sl_send_prompt(sl, seed_prompt)
         c.ok("irc-seed", f"run-id={seed_id}")
@@ -76,8 +79,10 @@ def test_skill_query_slack_mock(llm, sl):
         )
         llm.set_answer(
             recall_prompt,
-            f'(query "favorite color") '
-            f'(send "Your favorite color is {secret_color}.")',
+            [
+                ("query", { "content": "favorite color" }),
+                ("send", { "content": f"Your favorite color is {secret_color}." }),
+            ],
         )
         sl_send_prompt(sl, recall_prompt)
         c.ok("irc-recall", f"run-id={recall_id}")

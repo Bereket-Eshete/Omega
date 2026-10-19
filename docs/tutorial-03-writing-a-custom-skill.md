@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-- A local clone of OmegaClaw-Core (so you can edit MeTTa source).
+- A local clone of Omega (so you can edit MeTTa source).
 - Familiarity with running the agent — see [Usage](/README.md#usage).
 
 ## The anatomy of a skill
@@ -55,17 +55,16 @@ The LLM should emit `(word-count "the quick brown fox")` and respond with `4`.
 
 - Skill names are lowercase, hyphen-separated.
 - Every argument is a string literal in quotes. Variables are forbidden in LLM-generated skill calls (the loop rejects them in `getContext`).
-- Return a value that is safe to render into the `LAST_SKILL_USE_RESULTS` context — the loop runs the result through `helper.normalize_string`.
+- Return a value that is safe to render into the context — the loop runs the result through `helper.normalize_string`.
 - If your skill may fail, wrap error-producing subcalls in `catch` or let them fall through to the loop's `HandleError`.
 
 ## Verification
 
 - The new skill appears in the prompt (search logs for `word-count`).
 - The LLM invokes it without prompting tweaks.
-- The return value shows up in `LAST_SKILL_USE_RESULTS` on the next turn.
+- The return value shows up in LLM request on the next turn.
 
 ## Next steps
 
 - [reference-internals-skill-dispatch.md](./reference-internals-skill-dispatch.md) — how dispatch works.
 - [reference-internals-extension-points.md](./reference-internals-extension-points.md) — other places to hook in.
-- [tutorial-06-remote-agentverse-skills.md](./tutorial-06-remote-agentverse-skills.md) — delegate skills to a remote agent instead of running them locally.

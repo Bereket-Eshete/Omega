@@ -19,7 +19,7 @@ from tg_helpers import tg_send_prompt
 
 def test_skill_metta_telegram_mock(llm, tg):
     with Checker("metta skill invocation (telegram mock)") as c:
-        print(f"\n=== OmegaClaw: metta telegram mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: metta telegram mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("send prompt via Telegram with mocked metta + send response")
@@ -34,7 +34,10 @@ def test_skill_metta_telegram_mock(llm, tg):
         # concrete number is communicated back.
         llm.set_answer(
             prompt,
-            '(metta "(+ 2 2)") (send "The metta skill evaluated (+ 2 2) and returned 4.")',
+            [
+                ("metta", { "sexpression": "(+ 2 2)" }),
+                ("send", { "content": "The metta skill evaluated (+ 2 2) and returned 4." }),
+            ],
         )
         tg_send_prompt(tg, prompt)
         c.ok("telegram", f"run-id={c.run_id}")

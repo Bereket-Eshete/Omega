@@ -41,7 +41,7 @@ def chromadb_vector_count():
 
 def test_memory_chromadb_slack_mock(llm, sl):
     with Checker("chromadb vector write (slack mock)") as c:
-        print(f"\n=== OmegaClaw: chromadb slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: chromadb slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("count chromadb vectors before")
@@ -60,7 +60,7 @@ def test_memory_chromadb_slack_mock(llm, sl):
         )
         llm.set_answer(
             prompt,
-            f'(remember "Unique smoke marker {marker} was emitted by CI.")',
+            [("remember", { "content": f"Unique smoke marker {marker} was emitted by CI." })],
         )
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")

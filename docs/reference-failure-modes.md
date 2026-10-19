@@ -1,6 +1,6 @@
 # Reference — Failure Modes and Mitigations
 
-OmegaClaw has been exercised for thousands of continuous cycles on the reference deployment (the **Max Botnick** agent — see [Empirical context](#empirical-context) below). The failures in this page are observed and quantified, not hypothetical.
+Omega has been exercised for thousands of continuous cycles on the reference deployment (the **Max Botnick** agent — see [Empirical context](#empirical-context) below). The failures in this page are observed and quantified, not hypothetical.
 
 A hybrid LLM + formal-logic system can fail in at least three places: premise formulation, confidence propagation, and orchestration. This page catalogues each category, cites measured rates where available, and points to the mitigations.
 
@@ -89,7 +89,6 @@ Measured across 4,500+ operational cycles, the top error categories are:
 
 1. **Commands not executed** (`NOTHING_WAS_DONE`) — the LLM produced output that was not a valid skill tuple.
 2. **Multi-command parsing failures.**
-3. **Parenthesis mismatches** — repaired best-effort by `helper.balance_parentheses`, but not always successfully.
 
 These are **the most frequent failure mode in the entire system**, not occasional glitches.
 
@@ -157,7 +156,7 @@ Before trusting a conclusion:
 
 ## Empirical context
 
-The numbers on this page come from operational experience with **Max Botnick**, an OmegaClaw-hosted agent used by the project maintainers for internal reasoning experiments. Max ran **3,100+ continuous cycles minimum** (4,500+ cycles with full error instrumentation) and self-authored the whitepaper from which this documentation draws. The measurements are therefore OmegaClaw-on-OmegaClaw evaluations, with all the caveats that implies — they are indicative of the framework under realistic workloads but not a formal benchmark.
+The numbers on this page come from operational experience with **Max Botnick**, an Omega-hosted agent used by the project maintainers for internal reasoning experiments. Max ran **3,100+ continuous cycles minimum** (4,500+ cycles with full error instrumentation) and self-authored the whitepaper from which this documentation draws. The measurements are therefore Omega-on-Omega evaluations, with all the caveats that implies — they are indicative of the framework under realistic workloads but not a formal benchmark.
 
 ## See also
 

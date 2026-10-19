@@ -22,7 +22,7 @@ REF_TEMP_C = 18.0
 
 def test_search_weather_telegram_mock(llm, tg):
     with Checker("search weather valencia (telegram mock)") as c:
-        print(f"\n=== OmegaClaw: Valencia weather telegram mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: Valencia weather telegram mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("send prompt via Telegram with mocked send response")
@@ -34,7 +34,7 @@ def test_search_weather_telegram_mock(llm, tg):
         mocked_reply = (
             f"Current weather in Valencia, Spain: about {REF_TEMP_C:.1f}°C."
         )
-        llm.set_answer(prompt, f'(send "{mocked_reply}")')
+        llm.set_answer(prompt, [("send", { "content": f"{mocked_reply}" })])
         tg_send_prompt(tg, prompt)
         c.ok("telegram", f"run-id={c.run_id}")
 

@@ -26,8 +26,8 @@ class OpenAIAPI(providers.LLMProvider):
     def stop(self) -> None:
         self.delegate.stop()
 
-    def chat(self, prompt: str, max_tokens: int = 6000, reasoning_mode: str = "medium") -> str:
-        return self.delegate.chat(prompt, max_tokens, reasoning_mode)
+    def chat(self, args: providers.LLMRequest) -> providers.LLMResponse:
+        return self.delegate.chat(args)
 
 
 class OpenAIAPIPreconfigured(OpenAIAPI):
@@ -47,7 +47,7 @@ class OpenAIAPIPreconfigured(OpenAIAPI):
     def base_url(self):
         return self._base_url
 
-def loadOmegaClawPlugin():
+def loadOmegaPlugin():
     providers.registerLLMProvider("OpenAIAPI", OpenAIAPI("OpenAIAPI"))
     asicloud_model = config_get_by_key("asicloud_model", "minimax/minimax-m3")
     providers.registerLLMProvider("ASICloud", OpenAIAPIPreconfigured("ASICloud", "ASI_API_KEY", asicloud_model, "https://inference.asicloud.cudos.org/v1"))

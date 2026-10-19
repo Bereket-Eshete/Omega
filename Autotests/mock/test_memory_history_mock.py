@@ -21,7 +21,7 @@ from helpers import (
 
 def test_memory_history_mock(llm, comm):
     with Checker("history append (mock)") as c:
-        print(f"\n=== OmegaClaw: history append mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: history append mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("capture initial history state")
@@ -39,7 +39,7 @@ def test_memory_history_mock(llm, comm):
             f"Acknowledge with one short line that you received marker {c.run_id}.",
         )
         ack = f"Marker {c.run_id} received. REQ-{c.run_id} acknowledged."
-        llm.set_answer(prompt, f'(send "{ack}")')
+        llm.set_answer(prompt, [("send", { "content": f"{ack}" })])
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")
         c.ok("comm", f"run-id={c.run_id}")

@@ -23,7 +23,7 @@ WAIT = 30
 
 def test_create_empty_file_slack_mock(llm, sl):
     with Checker("create empty file (slack mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: create empty file slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: create empty file slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -38,8 +38,10 @@ def test_create_empty_file_slack_mock(llm, sl):
         )
         llm.set_answer(
             prompt,
-            f'(shell "mkdir -p {TARGET_DIR}") '
-            f'(write-file "{TARGET_FILE}" "")',
+            [
+                ("shell", { "cmd": f"mkdir -p {TARGET_DIR}" }),
+                ("write-file", { "filename": f"{TARGET_FILE}", "content": "" }),
+            ],
         )
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")

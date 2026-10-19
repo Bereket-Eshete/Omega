@@ -22,7 +22,7 @@ REF_TEMP_C = 18.0
 
 def test_search_weather_slack_mock(llm, sl):
     with Checker("search weather valencia (slack mock)") as c:
-        print(f"\n=== OmegaClaw: Valencia weather slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: Valencia weather slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("send prompt via Slack with mocked send response")
@@ -34,7 +34,7 @@ def test_search_weather_slack_mock(llm, sl):
         mocked_reply = (
             f"Current weather in Valencia, Spain: about {REF_TEMP_C:.1f}В°C."
         )
-        llm.set_answer(prompt, f'(send "{mocked_reply}")')
+        llm.set_answer(prompt, [("send", { "content": f"{mocked_reply}" })])
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")
 

@@ -19,7 +19,7 @@ from slack_helpers import sl_send_prompt
 
 def test_skill_metta_slack_mock(llm, sl):
     with Checker("metta skill invocation (slack mock)") as c:
-        print(f"\n=== OmegaClaw: metta slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: metta slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.step("send prompt via Slack with mocked metta + send response")
@@ -34,7 +34,10 @@ def test_skill_metta_slack_mock(llm, sl):
         # concrete number is communicated back.
         llm.set_answer(
             prompt,
-            '(metta "(+ 2 2)") (send "The metta skill evaluated (+ 2 2) and returned 4.")',
+            [
+                ("metta", { "sexpression": "(+ 2 2)" }),
+                ("send", { "content": "The metta skill evaluated (+ 2 2) and returned 4." }),
+            ],
         )
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")

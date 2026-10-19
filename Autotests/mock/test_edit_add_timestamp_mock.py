@@ -23,7 +23,7 @@ INITIAL_CONTENT = "This is a test note.\n"
 
 def test_edit_add_timestamp_mock(llm, comm):
     with Checker("edit add timestamp (mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: add timestamp mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: add timestamp mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -52,7 +52,7 @@ def test_edit_add_timestamp_mock(llm, comm):
         # real test.
         llm.set_answer(
             prompt,
-            f'(shell "date -Iseconds >> {TARGET_FILE}")',
+            [("shell", { "cmd": f"date -Iseconds >> {TARGET_FILE}" })]
         )
         if not comm.send_message(prompt):
             c.fail("comm", "could not deliver prompt within 60s")

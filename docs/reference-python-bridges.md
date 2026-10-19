@@ -38,17 +38,17 @@ YYYY-MM-DD HH:MM:SS | LEVEL    | module | message
 Docker container stdout/stderr is captured automatically and can be viewed with:
 
 ```bash
-docker logs -f omegaclaw
+docker logs -f omega
 ```
 
 **Custom logging configuration**
 
 Users can provide their own Python logging config file to control log levels, handlers, formatters, output destinations, and per-module logging behavior.
 
-When starting OmegaClaw through the launcher script, pass:
+When starting Omega through the launcher script, pass:
 
 ```bash
-scripts/omegaclaw start -l /path/to/logging.conf
+scripts/omega start -l /path/to/logging.conf
 ```
 
 For standalone runs without Docker, pass the config path to the MeTTa runtime:
@@ -57,7 +57,7 @@ For standalone runs without Docker, pass the config path to the MeTTa runtime:
 sh run.sh run.metta logConfigPath=/path/to/logging.conf
 ```
 
-If no custom config is provided, OmegaClaw uses `config/logging.conf`. If the configured file is missing, OmegaClaw falls back to basic stderr logging.
+If no custom config is provided, Omega uses `config/logging.conf`. If the configured file is missing, Omega falls back to basic stderr logging.
 
 ## `lib_llm_ext.py`
 
@@ -73,24 +73,12 @@ LLM and embedding bridges.
 
 OpenAI calls go through MeTTa-side helpers (`useGPT`, `useGPTEmbedding`) that are defined elsewhere in the library but use the same LLM call pattern.
 
-## `src/agentverse.py`
-
-Remote agent bridge.
-
-| Function | Purpose |
-|---|---|
-| `tavily_search(query)` | Forward a query to the remote Tavily search agent. |
-| `technical_analysis(ticker)` | Forward a ticker to the remote technical analysis agent. |
-
-Both use a fixed Agentverse address and return the remote agent's reply as a string. Add your own function following the same pattern — see [tutorial-06-remote-agentverse-skills.md](./tutorial-06-remote-agentverse-skills.md).
-
 ## `src/helper.py`
 
 String and time utilities used by the loop.
 
 | Function | Purpose |
 |---|---|
-| `balance_parentheses(str)` | Attempt to repair mismatched parentheses in LLM output before `sread` parses it. |
 | `normalize_string(obj)` | Render a skill return value into a string safe to embed in the next prompt. |
 | `around_time(ts, n)` | Backs `(episodes ts)` — returns `n` lines of `memory/history.metta` around `ts`. |
 

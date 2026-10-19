@@ -24,7 +24,7 @@ INITIAL_CONTENT = "This is a test note.\n"
 
 def test_edit_add_timestamp_slack_mock(llm, sl):
     with Checker("edit add timestamp (slack mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: add timestamp slack mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: add timestamp slack mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -53,7 +53,7 @@ def test_edit_add_timestamp_slack_mock(llm, sl):
         # real test.
         llm.set_answer(
             prompt,
-            f'(shell "date -Iseconds >> {TARGET_FILE}")',
+            [("shell", { "cmd": f"date -Iseconds >> {TARGET_FILE}" })],
         )
         sl_send_prompt(sl, prompt)
         c.ok("slack", f"run-id={c.run_id}")

@@ -8,6 +8,10 @@ except ImportError:
 from contextlib import contextmanager
 import re
 import threading
+import ast
+from providers import *
+
+_STEP_PREFIX = re.compile(r"^Step \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}: ")
 
 LLM_MOCK_PORT = 9765
 
@@ -55,7 +59,22 @@ class LlmMockAgent:
     def stop(self, timeout=None):
         self._rpc.stop(timeout)
 
-    def chat(self, content):
+    def chat(self, request):
+        if isinstance(request, str):
+            return self._legacy_chat(request)
+        # Only the focused frame can answer; admitted but unfocused work waits.
+        for message in request.messages:
+            if message.role == "system":
+                section = frame_section(message.content)
+                if section is not None:
+                    return self._make_llm_response(self._frame_answer(section))
+        users = [m for m in request.messages if m.role == "user"]
+        if not users:
+            return LLMResponse()
+        body = _STEP_PREFIX.sub("", users[-1].content, count=1)
+        return self._make_llm_response(self._message_answer(body))
+
+    def _legacy_chat(self, content):
         user = content.rsplit(":-:-:-:", 1)
         if len(user) < 2:
             return ""
@@ -77,7 +96,7 @@ class LlmMockAgent:
 
     def _message(self, suffix):
         try:
-            return eval(suffix)[1]
+            return ast.literal_eval(suffix)[1]
         except Exception:
             return None
 
@@ -137,8 +156,13 @@ class LlmMockAgent:
         # completes it instead, otherwise the next message is admitted but
         # never becomes current and every later test fails with it.
         if served == 0:
-            if complete_frame and not any(skill in response for skill in FRAME_COMPLETION_SKILLS):
-                response = f"{response} {FRAME_COMPLETION_ANSWER}"
+            if isinstance(response, str):
+                if complete_frame and not any(skill in response for skill in FRAME_COMPLETION_SKILLS):
+                    response = f"{response} {FRAME_COMPLETION_ANSWER}"
+            else:
+                response = list(response)
+                if complete_frame and not any(name in FRAME_COMPLETION_SKILLS for name, _ in response):
+                    response.append(("complete-goals-stm", {"summary": "Answered by the mock, frame completed by the test harness."}))
             print(f"[LlmMockAgent] Mock answers: {response}")
             return response
 
@@ -151,6 +175,42 @@ class LlmMockAgent:
 
     def _response(self, entry):
         return entry[0] if entry else None
+
+    def _make_llm_response(self, calls):
+        if not calls:
+            return LLMResponse()
+        if isinstance(calls, str):
+            # Parse quoted arguments without interpreting them as Python code.
+            tokens = re.findall(r'"(?:\\.|[^"\\])*"|[^\s()]+|[()]', calls)
+            parsed = []
+            index = 0
+            while index < len(tokens):
+                if tokens[index] != "(":
+                    raise ValueError("Expected mock tool call")
+                name = tokens[index + 1]
+                index += 2
+                args = []
+                while tokens[index] != ")":
+                    token = tokens[index]
+                    args.append(ast.literal_eval(token) if token.startswith('"') else token)
+                    index += 1
+                index += 1
+                names = {
+                    "send": ["content"], "write-file": ["filename", "content"],
+                    "append-file": ["filename", "content"], "write-file-b64": ["filename", "content_base64"],
+                    "complete-goals-stm": ["summary"], "complete-goals-ltm": ["summary"],
+                    "clear-frame-junk": ["summary"], "metta": ["sexpression"],
+                    "pin": ["message"], "remember": ["content"], "query": ["content"],
+                    "shell": ["cmd"], "read-file": ["filename"], "websearch": ["content"],
+                }.get(name)
+                if names is None or len(names) != len(args):
+                    raise ValueError(f"Unsupported legacy mock call: {name}")
+                parsed.append((name, dict(zip(names, args))))
+            calls = parsed
+        response = LLMResponse()
+        for index, (name, args) in enumerate(calls):
+            response.add_tool_call(LLMToolCall().with_name(name).with_id(f"mockid#{index}").with_arguments(args))
+        return response
 
     def on_set_answer(self, args):
         with self._lock:

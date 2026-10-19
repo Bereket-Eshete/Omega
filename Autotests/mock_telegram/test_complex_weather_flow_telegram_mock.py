@@ -35,7 +35,7 @@ FORECAST_TEXT = "New York tomorrow: clear, high 22 degrees Celsius."
 
 def test_complex_weather_flow_telegram_mock(llm, tg):
     with Checker("complex weather flow (telegram mock)", cleanup_dirs=[TARGET_DIR]) as c:
-        print(f"\n=== OmegaClaw: complex flow telegram mock (run-id {c.run_id}) ===",
+        print(f"\n=== Omega: complex flow telegram mock (run-id {c.run_id}) ===",
               flush=True)
 
         c.verify_clean()
@@ -58,11 +58,12 @@ def test_complex_weather_flow_telegram_mock(llm, tg):
         # Single LLM response containing the full pipeline.
         llm.set_answer(
             prompt,
-            f'(write-file "{WEATHER_TXT}" "{FORECAST_TEXT}") '
-            f'(write-file "{SCRIPT_SH}" '
-            f'"#!/bin/bash\\ngrep -oE \'[0-9]+\' {WEATHER_TXT} | head -1 > {TEMP_ONLY}\\n") '
-            f'(shell "chmod +x {SCRIPT_SH}") '
-            f'(shell "sh {SCRIPT_SH}")',
+            [
+                ("write-file", { "filename": f"{WEATHER_TXT}", "content": f"{FORECAST_TEXT}" }),
+                ("write-file", { "filename": f"{SCRIPT_SH}", "content": f"#!/bin/bash\ngrep -oE '[0-9]+' {WEATHER_TXT} | head -1 > {TEMP_ONLY}\n" }),
+                ("shell", { "cmd": f"chmod +x {SCRIPT_SH}" }),
+                ("shell", { "cmd": f"sh {SCRIPT_SH}" }),
+            ],
         )
         tg_send_prompt(tg, prompt)
         c.ok("telegram", f"run-id={c.run_id}")
