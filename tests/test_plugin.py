@@ -143,6 +143,47 @@ def test_name_collision_does_not_replace_existing_module(plugin_file, existing_k
     assert name not in plugin._plugins
 
 
+@pytest.mark.parametrize("existing_kind", ["module", "package", "namespace"])
+def test_name_collision_preserves_unimported_dependency(plugin_file, monkeypatch, tmp_path, existing_kind):
+    name, location = plugin_file("raise AssertionError('plugin must not execute')")
+    installed = tmp_path / "installed"
+    installed.mkdir()
+    if existing_kind == "module":
+        (installed / f"{name}.py").write_text("value = 'dependency'\n")
+    else:
+        package = installed / name
+        package.mkdir()
+        if existing_kind == "package":
+            (package / "__init__.py").write_text("value = 'dependency'\n")
+    monkeypatch.syspath_prepend(str(installed))
+    original_path = sys.path.copy()
+    assert name not in sys.modules
+
+    with pytest.raises(RuntimeError, match="another importable module"):
+        plugin.loadPythonPlugin(name, location)
+
+    assert name not in sys.modules
+    assert name not in plugin._plugins
+    assert sys.path == original_path
+    dependency = importlib.import_module(name)
+    if existing_kind == "namespace":
+        assert str(package) in dependency.__path__
+    else:
+        assert dependency.value == "dependency"
+
+
+def test_location_load_accepts_same_file_on_import_path(plugin_file, monkeypatch):
+    name, location = plugin_file()
+    monkeypatch.syspath_prepend(location)
+    assert name not in sys.modules
+
+    plugin.loadPythonPlugin(name, location)
+
+    loaded = plugin._plugins[name].mod
+    assert importlib.import_module(name) is loaded
+    assert loaded.load_count == 1
+
+
 def test_loaded_plugin_cannot_be_replaced_by_another_location(plugin_file, tmp_path):
     name, location = plugin_file()
     plugin.loadPythonPlugin(name, location)

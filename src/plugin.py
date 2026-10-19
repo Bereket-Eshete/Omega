@@ -94,6 +94,13 @@ def loadPythonPlugin(name, location):
             existing_path = getattr(mod, "__file__", None)
             if existing_path is None or pathlib.Path(existing_path).resolve() != modpath:
                 _error("_initPythonPlugin", f"Plugin name '{name}' is already used by another module ({existing_path}); cannot load {modpath}")
+        else:
+            # Also protect dependencies that are importable but not loaded yet.
+            existing_spec = importlib.util.find_spec(name)
+            if existing_spec is not None:
+                existing_path = existing_spec.origin
+                if existing_path is None or existing_path in ("built-in", "frozen") or pathlib.Path(existing_path).resolve() != modpath:
+                    _error("_initPythonPlugin", f"Plugin name '{name}' is already used by another importable module ({existing_path}); cannot load {modpath}; choose a different plugin name")
 
         # Multi-file plugins need their folder available for sibling imports.
         if str(location) not in sys.path:

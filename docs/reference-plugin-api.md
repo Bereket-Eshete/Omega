@@ -48,7 +48,10 @@ not execute its code or call its entry point again. This is not a hot-reload API
 For location-based loading, a name occupied by a different module, or by a
 module without a file path, causes an error instead of replacing that module.
 Choose plugin names that do not conflict with dependencies or standard-library
-modules, even if those modules have not been imported yet.
+modules, even if those modules have not been imported yet. The loader checks
+the existing import path before adding the plugin directory and rejects a
+name that resolves to another module or namespace package. A name that
+resolves to the same plugin file is allowed.
 
 If module execution fails, its newly added `sys.modules` entry is removed and
 the original exception is propagated. A missing or failing `loadOmegaPlugin`
